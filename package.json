@@ -1,0 +1,27 @@
+{
+  "name": "bottlem-insside",
+  "version": "0.1.0",
+  "description": "Instance Side Monitor of BottleM Server",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SomeBottle/BottleM-InsSide.git"
+  },
+  "keywords": [
+    "Minecraft",
+    "Server",
+    "API"
+  ],
+  "author": "SomeBottle",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/SomeBottle/BottleM-InsSide/issues"
+  },
+  "homepage": "https://github.com/SomeBottle/BottleM-InsSide#readme",
+  "dependencies": {
+    "ws": "^8.8.1"
+  }
+}
