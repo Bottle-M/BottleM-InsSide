@@ -11,7 +11,7 @@ const utils = require('./utils');
 * @note 如果文件路径带.json后缀，路径写法和writeFile一致
 */
 function ascRead(jPath) {
-    let fileTarget = jPath.includes('.json') ? jPath : (path.join(utils.execDir, jPath) + '.json'); // 构建待读取文件路径
+    let fileTarget = jPath.includes('.json') ? jPath : (path.join(utils.workDir, jPath) + '.json'); // 构建待读取文件路径
     return fs.readFile(fileTarget, {
         encoding: 'utf-8'
     }).then(data => {
@@ -27,7 +27,7 @@ function ascRead(jPath) {
  * @note 如果文件路径带.json后缀，路径写法和writeFile一致
  */
 function scRead(jPath) {
-    let fileTarget = jPath.includes('.json') ? jPath : (path.join(utils.execDir, jPath) + '.json'); // 构建待读取文件路径
+    let fileTarget = jPath.includes('.json') ? jPath : (path.join(utils.workDir, jPath) + '.json'); // 构建待读取文件路径
     try {
         return JSON.parse(readFileSync(fileTarget, {
             encoding: 'utf-8'

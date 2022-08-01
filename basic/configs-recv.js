@@ -16,7 +16,10 @@ var currentConfigs = {};
  * 从临时配置文件中读取配置
  */
 function readTmpConfigs() {
-    currentConfigs = jsons.scRead(insTempConfigName);
+    let absPath = path.join(utils.workDir, insTempConfigName),
+        parentPath = path.join(utils.workDir, '..', insTempConfigName);
+    // 如果index.js所在目录下没有配置文件，就向上找一层
+    currentConfigs = jsons.scRead(absPath) || jsons.scRead(parentPath);
     if (!currentConfigs) {
         currentConfigs = defaultConfigs;
         console.error(`[ERROR] Failed to read Config File, using DEFAULT`);
