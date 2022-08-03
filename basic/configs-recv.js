@@ -7,7 +7,10 @@ const path = require('path');
 const insTempConfigName = 'ins_side_configs.tmp.json';
 // 临时用的默认配置
 const defaultConfigs = {
-    'ws_port': 9527
+    'ws_port': 9527,
+    'ws_ping_timeout': 30000,
+    'remote_dir': '/root/',
+    'secret_key': null
 }
 // 配置储存在内存中
 var currentConfigs = {};
@@ -20,7 +23,7 @@ function readTmpConfigs() {
         parentPath = path.join(utils.workDir, '..', insTempConfigName);
     // 如果index.js所在目录下没有配置文件，就向上找一层
     currentConfigs = jsons.scRead(absPath) || jsons.scRead(parentPath);
-    if (!currentConfigs) {
+    if (!currentConfigs) { // 还是找不到，就用默认配置
         currentConfigs = defaultConfigs;
         console.error(`[ERROR] Failed to read Config File, using DEFAULT`);
     }
