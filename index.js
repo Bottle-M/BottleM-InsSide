@@ -1,5 +1,6 @@
 'use strict';
-const configs = require('./api/configs-recv');
+const configs = require('./barn/configs-recv');
+const router = require('./barn/router');
 const { WebSocketServer } = require('ws');
 const wsPort = configs.getConfigs('ws_port');
 // 创建WebSocket服务器
@@ -28,7 +29,7 @@ wsServer.on('connection', (ws) => {
             }
             this.authorized = true; // 通过认证
             authedConn = this; // 记录认证连接
-            console.log(`Received message => ${message}`);
+            router(this, parsed); // 路由
         }).on('close', () => {
             console.log('Connection closed');
         }).on('pong', wsBeat); // 接受心跳（pong是为响应ping而自动发送的）
