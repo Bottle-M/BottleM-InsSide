@@ -1,5 +1,5 @@
 'use strict';
-const configs = require('./basic/configs-recv');
+const configs = require('./api/configs-recv');
 const { WebSocketServer } = require('ws');
 const wsPort = configs.getConfigs('ws_port');
 // 创建WebSocket服务器
@@ -24,7 +24,7 @@ wsServer.on('connection', (ws) => {
             // 每条通信都必须要经过密匙验证
             if (!secret || parsed['key'] !== secret) {
                 this.authorized = false; // 认证不通过
-                return this.close(1000, 'Nanomachine, son.'); // 关闭连接
+                return this.close(1000, 'Nanoconnection, son.'); // 关闭连接
             }
             this.authorized = true; // 通过认证
             authedConn = this; // 记录认证连接
@@ -41,7 +41,7 @@ wsServer.on('connection', (ws) => {
 const beatInterval = setInterval(() => {
     if (!authedConn.connAlive) // 如果验证通过的连接已经死了
         authedConn = null; // 重置为null
-    wsServer.clients.forEach((ws) => {
+    wsServer.clients.forEach((ws) => { // 检测死亡连接
         if (!ws.connAlive) { // 连接非存活
             return ws.terminate(); // 强制终止连接
         }
