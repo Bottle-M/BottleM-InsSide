@@ -24,15 +24,15 @@ wsServer.on('connection', (ws) => {
                 secret = configs.getConfigs('secret_key');
             // 每条通信都必须要经过密匙验证
             if (!secret || parsed['key'] !== secret) {
-                this.authorized = false; // 认证不通过
-                return this.close(1000, 'Nanoconnection, son.'); // 关闭连接
+                ws.authorized = false; // 认证不通过
+                return ws.close(1000, 'Nanoconnection, son.'); // 关闭连接
             }
-            this.authorized = true; // 通过认证
-            authedConn = this; // 记录认证连接
-            router(this, parsed); // 路由
+            ws.authorized = true; // 通过认证
+            authedConn = ws; // 记录认证连接
+            router(ws, parsed); // 路由
         }).on('close', () => {
             console.log('Connection closed');
-        }).on('pong', wsBeat); // 接受心跳（pong是为响应ping而自动发送的）
+        }).on('pong', wsBeat.bind(ws)); // 接受心跳（pong是为响应ping而自动发送的）
     } else { // 已经有验证通过的连接了，直接关闭
         ws.connAlive = false; // 连接非存活
         ws.close(1000, 'Valid connection already exists');
