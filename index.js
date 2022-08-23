@@ -40,7 +40,7 @@ wsServer.on('connection', (ws) => {
 });
 
 const beatInterval = setInterval(() => {
-    if (!authedConn.connAlive) // 如果验证通过的连接已经死了
+    if (authedConn && !authedConn.connAlive) // 如果验证通过的连接已经死了
         authedConn = null; // 重置为null
     wsServer.clients.forEach((ws) => { // 检测死亡连接
         if (!ws.connAlive) { // 连接非存活
