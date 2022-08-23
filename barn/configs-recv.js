@@ -5,13 +5,10 @@ const utils = require('./utils');
 const path = require('path');
 // 实例端临时配置的文件名（如果这一项改了，Backend的源码也要改）
 const insTempConfigName = 'ins_side_configs.tmp.json';
-// 临时用的默认配置
-const defaultConfigs = {
-    'ws_port': 9527,
-    'ws_ping_timeout': 30000,
-    'remote_dir': '/root/',
-    'secret_key': null
-}
+// 获得命令行选项
+const cmdOptions = utils.optionsInArgs();
+// 从命令行参数获得配置文件路径，默认/root/baseData
+const configPath = cmdOptions['data'] || cmdOptions['d'] || '/root/baseData';
 // 配置储存在内存中
 var currentConfigs = {};
 
@@ -19,13 +16,12 @@ var currentConfigs = {};
  * 从临时配置文件中读取配置
  */
 function readTmpConfigs() {
-    let absPath = path.join(utils.workDir, insTempConfigName),
-        parentPath = path.join(utils.workDir, '..', insTempConfigName);
+    let absPath = path.join(configPath, insTempConfigName);
     // 如果index.js所在目录下没有配置文件，就向上找一层
-    currentConfigs = jsons.scRead(absPath) || jsons.scRead(parentPath);
-    if (!currentConfigs) { // 还是找不到，就用默认配置
-        currentConfigs = defaultConfigs;
-        console.error(`[ERROR] Failed to read Config File, using DEFAULT`);
+    currentConfigs = jsons.scRead(absPath);
+    if (!currentConfigs) { // 找不到配置，退出进程
+        console.error(`[ERROR] Failed to read Config File!`);
+        process.exit(1); // 直接退出
     }
 }
 

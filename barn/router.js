@@ -10,7 +10,7 @@ module.exports = function (recvObj, ws) {
     let { act, data } = recvObj; // 获得操作和数据
     switch (act) {
         case 'status_sync': // 同步状态码
-
+            
             break;
     }
 }
