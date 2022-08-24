@@ -10,9 +10,9 @@ const wsServer = new WebSocketServer({
     port: wsPort
 });
 // WebSocket心跳处理
-const wsBeat = () => {
+const wsBeat = function () {
     console.log('pong');
-    if (this.authorized) // 前提：连接已经通过认证
+    if (this.authorized)// 前提：连接已经通过认证
         this.connAlive = true; // 标记连接正常
 }
 // 记录通过验证的客户端连接，只允许存在一个验证通过的连接
@@ -32,6 +32,7 @@ wsServer.on('connection', (ws) => {
                 return ws.close(1000, 'Nanoconnection, son.'); // 关闭连接
             }
             ws.authorized = true; // 通过认证
+            console.log('New authorized connection has been made.');
             wsSender.set(ws); // 储存主连接
             authedConn = ws; // 记录认证连接
             router(parsed, ws); // 路由
