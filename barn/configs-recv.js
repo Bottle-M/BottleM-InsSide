@@ -28,6 +28,7 @@ function readTmpConfigs() {
 readTmpConfigs(); // 启动时就先读取一次
 
 module.exports = {
+    refreshConfigs: readTmpConfigs,
     /**
      * 获得实例端当前的配置
      * @param {String} key 配置项的键

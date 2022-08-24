@@ -1,7 +1,9 @@
 'use strict';
 const configs = require('./barn/configs-recv');
 const router = require('./barn/router');
+const wsSender = require('./barn/ws-sender');
 const { WebSocketServer } = require('ws');
+const { refreshConfigs } = require('./barn/configs-recv');
 const wsPort = configs.getConfigs('ws_port');
 // 创建WebSocket服务器
 const wsServer = new WebSocketServer({
@@ -9,6 +11,7 @@ const wsServer = new WebSocketServer({
 });
 // WebSocket心跳处理
 const wsBeat = () => {
+    console.log('pong');
     if (this.authorized) // 前提：连接已经通过认证
         this.connAlive = true; // 标记连接正常
 }
@@ -19,6 +22,7 @@ wsServer.on('connection', (ws) => {
     ws.connAlive = true; // 新连接默认都是正常的
     // 还没有验证通过的连接
     if (!authedConn) {
+        refreshConfigs(); // 重读配置
         ws.on('message', (message) => {
             let parsed = JSON.parse(message),
                 secret = configs.getConfigs('secret_key');
@@ -28,8 +32,9 @@ wsServer.on('connection', (ws) => {
                 return ws.close(1000, 'Nanoconnection, son.'); // 关闭连接
             }
             ws.authorized = true; // 通过认证
+            wsSender.set(ws); // 储存主连接
             authedConn = ws; // 记录认证连接
-            router(ws, parsed); // 路由
+            router(parsed, ws); // 路由
         }).on('close', () => {
             console.log('Connection closed');
         }).on('pong', wsBeat.bind(ws)); // 接受心跳（pong是为响应ping而自动发送的）
@@ -44,6 +49,7 @@ const beatInterval = setInterval(() => {
         authedConn = null; // 重置为null
     wsServer.clients.forEach((ws) => { // 检测死亡连接
         if (!ws.connAlive) { // 连接非存活
+            console.log('Cleared one dead connection.');
             return ws.terminate(); // 强制终止连接
         }
         ws.connAlive = false; // 标记连接非存活
