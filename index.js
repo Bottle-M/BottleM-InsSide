@@ -5,6 +5,7 @@ const wsSender = require('./barn/ws-sender');
 const { WebSocketServer } = require('ws');
 const { refreshConfigs } = require('./barn/configs-recv');
 const wsPort = configs.getConfigs('ws_port');
+const server = require('./barn/server');
 // 创建WebSocket服务器
 const wsServer = new WebSocketServer({
     port: wsPort
@@ -62,5 +63,7 @@ const beatInterval = setInterval(() => {
 wsServer.on('close', () => {
     clearInterval(beatInterval);
 });
+
+server.setup(); // 检查并开始部署服务器
 
 console.log(`WebSocket server started on port ${wsPort}`);

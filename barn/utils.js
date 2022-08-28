@@ -1,6 +1,36 @@
 // 能用到的工具函数或者属性
 'use strict';
+const { writeFileSync, rmSync, statSync } = require('fs');
 const path = require('path');
+const workDir = process.cwd();
+const lockFilePath = path.join(workDir, 'deploy.lock');
+
+/**
+ * 锁定/解除锁定部署
+ * @param {Boolean} operate 是否锁定
+ */
+function lockDeploy(operate) {
+    if (operate) {
+        writeFileSync(lockFilePath, new Date().getTime(), {
+            encoding: 'utf8'
+        });
+    } else {
+        rmSync(lockFilePath);
+    }
+}
+
+/**
+ * 查询Minecraft是否已经部署
+ * @returns {Boolean} 是否已经部署 
+ */
+function deployed() {
+    try {
+        statSync(lockFilePath);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
 
 /**
  * 获得命令行参数解析出的选项(options)内容
@@ -28,6 +58,8 @@ function optionsInArgs() {
 module.exports = {
     // 考虑到到时候可能要打包成可执行文件，这里用process.cwd()
     // 注意，process.cwd()代表的index.js所在目录，也就是程序执行入口所在目录
-    workDir: process.cwd(),
-    optionsInArgs
+    workDir,
+    optionsInArgs,
+    lockDeploy,
+    deployed
 }
