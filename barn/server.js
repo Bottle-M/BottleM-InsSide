@@ -1,6 +1,7 @@
 // 服务器部署/监控部分
 'use strict';
 const { ping } = require('minecraft-protocol');
+const path = require('path');
 const utils = require('./utils');
 const configs = require('./configs-recv');
 const status = require('./status-handler');
@@ -32,12 +33,18 @@ function deploy() {
         deploy_scripts: deployScripts, // 部署脚本
         env: environment, // 环境变量
         script_exec_dir: execDir, // 脚本执行所在目录
-        mc_server_launch_timeout: launchTimeout // Minecraft服务器启动超时时间
+        mc_server_launch_timeout: launchTimeout, // Minecraft服务器启动超时时间
+        packed_server_dir,
+        mc_server_dir,
     } = configs.getConfigs();
     let tasks = []; // 任务队列
     logger.record(1, 'Start to execute deploy scripts for Minecraft Server...'); // 记录日志
     status.set(2202); // 设置状态码为2202，表示正在部署服务器
     utils.lockDeploy(true); // 锁定部署，防止重复部署
+    // 检查目录是否存在
+    utils.dirCheck(script_exec_dir);
+    utils.dirCheck(packed_server_dir);
+    utils.dirCheck(mc_server_dir);
     return new Promise((resolve, reject) => {
         for (let i = 0, len = deployScripts.length; i < len; i++) {
             let absPath = path.join(dataDir, deployScripts[i]); // 获得脚本的绝对路径
@@ -94,8 +101,21 @@ function deploy() {
  */
 function monitor(maintain = false) {
     status.set(2300); // 设置状态码为2300，表示服务器成功部署
+    let {
+        server_idling_timeout: maxIdlingTime, // 服务器最长空闲时间
+        player_leaver_reset_timeout: resetTimeAfterLeave // 玩家离开后重置时间
+    } = configs.getConfigs();
+    let idlingTime = 0; // 服务器空闲时间(ms)
     return new Promise((resolve, reject) => {
-        
+        // 服务器空闲时间计时器
+        let counter = setInterval(() => {
+            idlingTime += 1000;
+            if (idlingTime >= maxIdlingTime) {
+                clearInterval(counter); // 停止计时器
+                // 进入接下来的关服流程
+                resolve('Minecraft Server idle for too long.');
+            }
+        }, 1000);
     });
 }
 
@@ -109,6 +129,7 @@ function setup(maintain = false) {
         .then(res => monitor(maintain)) // 部署成功后由monitor监视Minecraft服务器
         .catch(err => { // 错误处理
             // 通过logger模块提醒主控端，这边发生了错误！
+            console.log(`Error occured: ${err}`);
             logger.record(3, err, true);
         })
 }

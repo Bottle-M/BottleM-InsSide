@@ -1,9 +1,23 @@
 // 能用到的工具函数或者属性
 'use strict';
-const { writeFileSync, rmSync, statSync } = require('fs');
+const { writeFileSync, rmSync, statSync, mkdirSync } = require('fs');
 const path = require('path');
 const workDir = process.cwd();
 const lockFilePath = path.join(workDir, 'deploy.lock');
+
+/**
+ * (同步)检查目录是否存在，不存在就创建
+ * @param {String} dirPath 目录绝对路径
+ */
+function dirCheck(dirPath) {
+    try {
+        statSync(dirPath);
+    } catch (e) {
+        mkdirSync(dirPath, {
+            recursive: true // 支持深层目录
+        });
+    }
+}
 
 /**
  * 锁定/解除锁定部署
@@ -11,7 +25,7 @@ const lockFilePath = path.join(workDir, 'deploy.lock');
  */
 function lockDeploy(operate) {
     if (operate) {
-        writeFileSync(lockFilePath, new Date().getTime(), {
+        writeFileSync(lockFilePath, Date.now().toString(), {
             encoding: 'utf8'
         });
     } else {
@@ -61,5 +75,6 @@ module.exports = {
     workDir,
     optionsInArgs,
     lockDeploy,
-    deployed
+    deployed,
+    dirCheck
 }
