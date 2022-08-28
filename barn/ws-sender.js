@@ -12,6 +12,7 @@ function sendUnsent() {
         let obj = unsentObjs[i];
         if (originalSend(obj)) { // 尝试发送数据
             unsentObjs.splice(i, 1); // 如果发送成功，则从未发送数据列表中移除
+            i--;
         }
     }
     if (unsentObjs.length === 0) { // 所有未发送数据都成功发送了，则停止轮询

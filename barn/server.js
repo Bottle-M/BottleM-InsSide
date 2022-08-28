@@ -48,24 +48,23 @@ function deploy() {
     return new Promise((resolve, reject) => {
         for (let i = 0, len = deployScripts.length; i < len; i++) {
             let absPath = path.join(dataDir, deployScripts[i]); // 获得脚本的绝对路径
-            tasks.push(() => {
-                new Promise((res, rej) => {
-                    exec(absPath, {
-                        cwd: execDir, // 执行脚本的目录
-                        env: environment,
-                        shell: '/bin/bash', // 指定bash解释器
-                        encoding: 'utf-8'
-                    }, (err, stdout, stderr) => {
-                        if (err) {
-                            rej(err); // 错误留给上层处理
-                        } else {
-                            console.log(`Exec: ${absPath}`);
-                            console.log(`stdout: ${stdout}\nstderr: ${stderr}\n\n`);
-                            res();
-                        }
-                    })
+            tasks.push(() => new Promise((res, rej) => {
+                console.log(`Executing: ${absPath}`);
+                exec(absPath, {
+                    cwd: execDir, // 执行脚本的目录
+                    env: environment,
+                    shell: '/bin/bash', // 指定bash解释器
+                    encoding: 'utf-8'
+                }, (err, stdout, stderr) => {
+                    if (err) {
+                        rej(err); // 错误留给上层处理
+                    } else {
+                        console.log(`stdout: ${stdout}\nstderr: ${stderr}\n\n`);
+                        res();
+                    }
                 })
-            });
+            })
+            );
         }
         // 逐个完成任务
         let finishTask = (index) => {

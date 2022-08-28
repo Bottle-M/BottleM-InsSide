@@ -8,7 +8,6 @@ const wsSender = require('./ws-sender');
  * @param {String} msg 消息内容
  * @param {Boolean} error 是否发生了错误(默认false)
  * @note 1:普通提示 2:警告 3:错误
- * @note 记录日志的时候如果WebSocket连接断开，会暂时缓存日志，等待WebSocket重新连接后再发送
  */
 function record(level, msg, error = false) {
     let time = new Date().getTime(), // 获得当前时间戳
