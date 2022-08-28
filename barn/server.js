@@ -42,7 +42,7 @@ function deploy() {
     status.set(2202); // 设置状态码为2202，表示正在部署服务器
     utils.lockDeploy(true); // 锁定部署，防止重复部署
     // 检查目录是否存在
-    utils.dirCheck(script_exec_dir);
+    utils.dirCheck(execDir);
     utils.dirCheck(packed_server_dir);
     utils.dirCheck(mc_server_dir);
     return new Promise((resolve, reject) => {
