@@ -48,24 +48,36 @@ function deploy() {
     return new Promise((resolve, reject) => {
         for (let i = 0, len = deployScripts.length; i < len; i++) {
             let absPath = path.join(dataDir, deployScripts[i]); // 获得脚本的绝对路径
-            tasks.push(new Promise((res, rej) => {
-                exec(absPath, {
-                    cwd: execDir, // 执行脚本的目录
-                    env: environment,
-                    shell: '/bin/bash', // 指定bash解释器
-                    encoding: 'utf-8'
-                }, (err, stdout, stderr) => {
-                    if (err) {
-                        rej(err); // 错误留给上层处理
-                    } else {
-                        console.log(`Exec: ${absPath}`);
-                        console.log(`stdout: ${stdout}\nstderr: ${stderr}\n\n`);
-                        res();
-                    }
+            tasks.push(() => {
+                new Promise((res, rej) => {
+                    exec(absPath, {
+                        cwd: execDir, // 执行脚本的目录
+                        env: environment,
+                        shell: '/bin/bash', // 指定bash解释器
+                        encoding: 'utf-8'
+                    }, (err, stdout, stderr) => {
+                        if (err) {
+                            rej(err); // 错误留给上层处理
+                        } else {
+                            console.log(`Exec: ${absPath}`);
+                            console.log(`stdout: ${stdout}\nstderr: ${stderr}\n\n`);
+                            res();
+                        }
+                    })
                 })
-            }));
+            });
         }
-        Promise.all(tasks).then(success => {
+        // 逐个完成任务
+        let finishTask = (index) => {
+            return tasks[index]().then(res => {
+                if (index < tasks.length - 1) {
+                    finishTask(index + 1);
+                } else {
+                    return Promise.resolve();
+                }
+            })
+        };
+        finishTask(0).then(success => {
             resolve();
         }).catch(e => {
             reject(e);
