@@ -34,6 +34,7 @@ wsServer.on('connection', (ws) => {
             }
             ws.authorized = true; // 通过认证
             console.log('New authorized connection has been made.');
+            console.log(`WebSocket BufferedAmount:${ws.bufferedAmount}`);
             wsSender.set(ws); // 储存主连接
             authedConn = ws; // 记录认证连接
             router(parsed, ws); // 路由
