@@ -87,7 +87,7 @@ function deploy() {
             // 等待Minecraft服务器启动，轮询间隔为10s
             const interval = 10000;
             console.log('ready to ping');
-            let spend = 0, // 花费的时间
+            /*let spend = 0, // 花费的时间
                 timer = setInterval(() => {
                     spend += interval;
                     console.log('pinging Minecraft Server');
@@ -103,7 +103,7 @@ function deploy() {
                             reject('Minecraft Server launch timeout!');
                         }
                     });
-                }, interval);
+                }, interval);)*/
         })
     });
 }
