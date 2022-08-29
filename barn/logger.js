@@ -19,6 +19,7 @@ function record(level, msg, error = false) {
             'error': error // 是否发生错误
         };
     wsSender.send(newLog); // 发送日志
+    console.log(msg); // 输出到控制台
 }
 
 module.exports = {

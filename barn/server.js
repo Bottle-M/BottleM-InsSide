@@ -14,7 +14,6 @@ const { exec } = require('child_process');
  */
 function deploy() {
     if (utils.deployed()) {
-        logger.record(1, 'serverDeployed!!!!!'); // 记录日志
         // 如果已经部署了，先查询服务器是否正常启动
         // 这种情况一般是实例端意外重启，需要恢复服务器的状态
         return ping({
@@ -58,9 +57,9 @@ function deploy() {
                     encoding: 'utf-8'
                 }, (err, stdout, stderr) => {
                     if (err) {
-                        rej(err + '\nINS_STDOUT:' + stdout + '\nINS_STDERR:' + stderr); // 错误留给上层处理
+                        rej(err + '\nINS_STDOUT:' + stdout + '\nINS_STDERR:' + stderr + '\n-----------\n'); // 错误留给上层处理
                     } else {
-                        console.log(`stdout: ${stdout}\nstderr: ${stderr}\n\n`);
+                        console.log(`stdout: ${stdout}\nstderr: ${stderr}\n------------------\n`);
                         res();
                     }
                 })
@@ -83,12 +82,15 @@ function deploy() {
             reject(e);
         });
     }).then(res => {
+        status.set(2203); // 设置状态码为2203，表示等待Minecraft服务器启动
         return new Promise((resolve, reject) => {
             // 等待Minecraft服务器启动，轮询间隔为10s
             const interval = 10000;
+            console.log('ready to ping');
             let spend = 0, // 花费的时间
                 timer = setInterval(() => {
                     spend += interval;
+                    console.log('pinging Minecraft Server');
                     ping({
                         host: '127.0.0.1',
                         port: 25565
@@ -112,6 +114,7 @@ function deploy() {
  * @returns {Promise}
  */
 function monitor(maintain = false) {
+    console.log('Server Successfully Deployed!');
     status.set(2300); // 设置状态码为2300，表示服务器成功部署
     let {
         server_idling_timeout: maxIdlingTime, // 服务器最长空闲时间
