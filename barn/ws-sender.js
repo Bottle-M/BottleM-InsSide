@@ -27,6 +27,7 @@ function get() {
 /**
  * 通过主WebSocket发送数据，如果未发送成功会伺机重新发送
  * @param {Object} respObj 
+ * @note https://github.com/websockets/ws/issues/999#issuecomment-279233272
  */
 function send(respObj) {
     let timer = setInterval(() => {
