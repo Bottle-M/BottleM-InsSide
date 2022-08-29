@@ -17,16 +17,7 @@ function deploy() {
         // 如果已经部署了，先查询服务器是否正常启动
         // 这种情况一般是实例端意外重启，需要恢复服务器的状态
         console.log('Resuming...');
-        return ping({
-            host: '127.0.0.1',
-            port: 25565
-        }).then(result => {
-            return Promise.resolve(); // 直接进入下一个流程
-        }).catch(err => {
-            // 服务器未启动，需要重新部署
-            utils.lockDeploy(false); // 解除部署锁
-            return deploy();
-        });
+        return Promise.resolve(true); // 直接进入下一个流程
     }
     // 如果尚未部署Minecraft服务器，则开始
     let {
@@ -34,7 +25,6 @@ function deploy() {
         deploy_scripts: deployScripts, // 部署脚本
         env: environment, // 环境变量
         script_exec_dir: execDir, // 脚本执行所在目录
-        mc_server_launch_timeout: launchTimeout, // Minecraft服务器启动超时时间
         packed_server_dir,
         mc_server_dir,
     } = configs.getConfigs();
@@ -84,30 +74,46 @@ function deploy() {
         });
     }).then(res => {
         utils.showMemUsage();
-        status.set(2203); // 设置状态码为2203，表示等待Minecraft服务器启动
-        return new Promise((resolve, reject) => {
-            // 等待Minecraft服务器启动，轮询间隔为10s
-            const interval = 10000;
-            console.log('ready to ping');
-            let spend = 0, // 花费的时间
-                timer = setInterval(() => {
-                    spend += interval;
-                    console.log('pinging Minecraft Server');
-                    ping({
-                        host: '127.0.0.1',
-                        port: 25565
-                    }).then(result => { // ping到服务器，表示服务器已经启动
+        return Promise.resolve(false);
+    });
+}
+
+/**
+ * 等待服务器启动
+ * @param {Boolean} resume 是否是恢复模式
+ * @returns {Promise}
+ * @note 实例端重启后如果有部署锁，会以resume=true的方式进入这个函数，如果服务器未启动，会重新尝试启动
+ */
+function waiter(resume = false) {
+    // Minecraft服务器启动超时时间
+    let launchTimeout = configs.getConfigs('mc_server_launch_timeout');
+    status.set(2203); // 设置状态码为2203，表示等待Minecraft服务器启动
+    return new Promise((resolve, reject) => {
+        // 等待Minecraft服务器启动，轮询间隔为10s
+        const interval = 10000;
+        let spend = 0, // 花费的时间
+            timer = setInterval(() => {
+                spend += interval;
+                console.log('pinging Minecraft Server');
+                ping({
+                    host: '127.0.0.1',
+                    port: 25565
+                }).then(result => { // ping到服务器，表示服务器已经启动
+                    clearInterval(timer); // 停止轮询
+                    resolve(); // 进入下一个流程
+                }).catch(err => {
+                    if (spend >= launchTimeout) { // 超时
                         clearInterval(timer); // 停止轮询
-                        resolve(); // 进入下一个流程
-                    }).catch(err => {
-                        if (spend >= launchTimeout) { // 超时
-                            clearInterval(timer); // 停止轮询
+                        if (resume) {
+                            utils.lockDeploy(false); // 解锁部署
+                            resolve(deploy()); // 尝试重新部署服务器
+                        } else {
                             reject('Minecraft Server launch timeout!');
                         }
-                    });
-                }, interval);
-        })
-    });
+                    }
+                });
+            }, interval);
+    })
 }
 
 /**
@@ -144,6 +150,7 @@ function monitor(maintain = false) {
 function setup(maintain = false) {
     utils.showMemUsage();
     deploy()
+        .then(resume => waiter(resume)) // 等待Minecraft服务器启动
         .then(res => monitor(maintain)) // 部署成功后由monitor监视Minecraft服务器
         .catch(err => { // 错误处理
             // 通过logger模块提醒主控端，这边发生了错误！
