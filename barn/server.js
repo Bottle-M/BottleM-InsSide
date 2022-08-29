@@ -82,6 +82,7 @@ function deploy() {
             reject(e);
         });
     }).then(res => {
+        utils.showMemUsage();
         status.set(2203); // 设置状态码为2203，表示等待Minecraft服务器启动
         return new Promise((resolve, reject) => {
             // 等待Minecraft服务器启动，轮询间隔为10s
@@ -140,6 +141,7 @@ function monitor(maintain = false) {
  * @note 维护模式下，服务器启动后不会受到监控（不会自动关闭）
  */
 function setup(maintain = false) {
+    utils.showMemUsage();
     deploy()
         .then(res => monitor(maintain)) // 部署成功后由monitor监视Minecraft服务器
         .catch(err => { // 错误处理
