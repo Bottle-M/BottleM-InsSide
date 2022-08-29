@@ -40,10 +40,10 @@ function lockDeploy(operate) {
 function deployed() {
     try {
         statSync(lockFilePath);
-        return true;
     } catch (e) {
         return false;
     }
+    return true;
 }
 
 /**

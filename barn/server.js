@@ -14,6 +14,7 @@ const { exec } = require('child_process');
  */
 function deploy() {
     if (utils.deployed()) {
+        logger.record(1, 'serverDeployed!!!!!'); // 记录日志
         // 如果已经部署了，先查询服务器是否正常启动
         // 这种情况一般是实例端意外重启，需要恢复服务器的状态
         return ping({
@@ -57,7 +58,7 @@ function deploy() {
                     encoding: 'utf-8'
                 }, (err, stdout, stderr) => {
                     if (err) {
-                        rej(err + '\nSTDOUT:' + stdout + '\nSTDERR:' + stderr); // 错误留给上层处理
+                        rej(err + '\nINS_STDOUT:' + stdout + '\nINS_STDERR:' + stderr); // 错误留给上层处理
                     } else {
                         console.log(`stdout: ${stdout}\nstderr: ${stderr}\n\n`);
                         res();
