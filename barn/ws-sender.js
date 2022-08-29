@@ -1,6 +1,6 @@
 // 储存WebSocket连接的模块
 'use strict';
-var webSocketStore = null;
+var mainConnection = null;
 var dataSending = false; // 是否正在发送数据
 
 /**
@@ -8,7 +8,7 @@ var dataSending = false; // 是否正在发送数据
  * @param {WebSocket} ws WebSocket对象
  */
 function set(ws) {
-    webSocketStore = ws;
+    mainConnection = ws;
 }
 
 /**
@@ -16,7 +16,7 @@ function set(ws) {
  * @returns {WebSocket} WebSocket对象，获取失败、或者链接已经死亡则返回null
  */
 function get() {
-    let ws = webSocketStore;
+    let ws = mainConnection;
     if (ws && ws.connAlive) {
         return ws;
     }
@@ -27,6 +27,7 @@ function get() {
 /**
  * 通过主WebSocket发送数据，如果未发送成功会伺机重新发送
  * @param {Object} respObj 
+ * @note Websocket.send不能连续调用！之前因为这里内存溢出，排查了半天！
  * @note https://github.com/websockets/ws/issues/999#issuecomment-279233272
  */
 function send(respObj) {

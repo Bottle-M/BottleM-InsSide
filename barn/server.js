@@ -94,7 +94,7 @@ function waiter(resume = false) {
         let spend = 0, // 花费的时间
             timer = setInterval(() => {
                 spend += interval;
-                console.log('pinging Minecraft Server');
+                console.log('Pinging Minecraft Server');
                 ping({
                     host: '127.0.0.1',
                     port: 25565
