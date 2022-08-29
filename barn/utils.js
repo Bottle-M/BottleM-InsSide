@@ -33,6 +33,8 @@ function showMemUsage() {
     console.log('-------------------');
 }
 
+setInterval(showMemUsage, 2000); // 每两秒显示一下内存情况
+
 /**
  * 锁定/解除锁定部署
  * @param {Boolean} operate 是否锁定
