@@ -60,6 +60,7 @@ function originalSend(respObj) {
  */
 function send(respObj) {
     if (!originalSend(respObj)) {
+        console.log('New unsent data was temporarily saved.');
         unsentObjs.push(respObj); // 如果发送失败，则将数据添加到未发送数据列表中
         clearInterval(unsentChecker);
         unsentChecker = setInterval(sendUnsent, 4000); // 开启轮询，看什么时候能发送成功

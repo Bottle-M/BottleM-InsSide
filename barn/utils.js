@@ -28,6 +28,8 @@ function showMemUsage() {
     console.log(`rss: ${mem.rss}`);
     console.log(`heapTotal: ${mem.heapTotal}`);
     console.log(`heapUsed: ${mem.heapUsed}`);
+    console.log(`external: ${mem.external}`);
+    console.log(`arrayBuffers: ${mem.arrayBuffers}`);
     console.log('-------------------');
 }
 
