@@ -70,11 +70,11 @@ function deploy() {
         let finishTask = (index) => {
             return tasks[index]().then(res => {
                 if (index < tasks.length - 1) {
-                    finishTask(index + 1);
+                    return finishTask(index + 1);
                 } else {
                     return Promise.resolve();
                 }
-            })
+            });
         };
         finishTask(0).then(success => {
             resolve();
