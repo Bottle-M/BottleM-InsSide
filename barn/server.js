@@ -16,6 +16,7 @@ function deploy() {
     if (utils.deployed()) {
         // 如果已经部署了，先查询服务器是否正常启动
         // 这种情况一般是实例端意外重启，需要恢复服务器的状态
+        console.log('Resuming...');
         return ping({
             host: '127.0.0.1',
             port: 25565
@@ -88,7 +89,7 @@ function deploy() {
             // 等待Minecraft服务器启动，轮询间隔为10s
             const interval = 10000;
             console.log('ready to ping');
-            /*let spend = 0, // 花费的时间
+            let spend = 0, // 花费的时间
                 timer = setInterval(() => {
                     spend += interval;
                     console.log('pinging Minecraft Server');
@@ -104,7 +105,7 @@ function deploy() {
                             reject('Minecraft Server launch timeout!');
                         }
                     });
-                }, interval);)*/
+                }, interval);
         })
     });
 }
