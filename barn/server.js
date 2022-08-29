@@ -57,7 +57,7 @@ function deploy() {
                     encoding: 'utf-8'
                 }, (err, stdout, stderr) => {
                     if (err) {
-                        rej(err); // 错误留给上层处理
+                        rej(err + '\nSTDOUT:' + stdout + '\nSTDERR:' + stderr); // 错误留给上层处理
                     } else {
                         console.log(`stdout: ${stdout}\nstderr: ${stderr}\n\n`);
                         res();
