@@ -104,12 +104,10 @@ function waiter(resume = false) {
                 }).catch(err => {
                     if (spend >= launchTimeout) { // 超时
                         clearInterval(timer); // 停止轮询
-                        if (resume) {
-                            utils.lockDeploy(false); // 解锁部署
-                            resolve(deploy()); // 尝试重新部署服务器
-                        } else {
-                            reject('Minecraft Server launch timeout!');
-                        }
+                        reject('Minecraft Server launch timeout!');
+                    } else if (resume) {
+                        utils.lockDeploy(false); // 解锁部署
+                        resolve(deploy()); // 尝试重新部署服务器
                     }
                 });
             }, interval);
@@ -130,15 +128,23 @@ function monitor(maintain = false) {
     } = configs.getConfigs();
     let idlingTime = 0; // 服务器空闲时间(ms)
     return new Promise((resolve, reject) => {
-        // 服务器空闲时间计时器
-        let counter = setInterval(() => {
-            idlingTime += 1000;
-            if (idlingTime >= maxIdlingTime) {
-                clearInterval(counter); // 停止计时器
-                // 进入接下来的关服流程
-                resolve('Minecraft Server idle for too long.');
-            }
-        }, 1000);
+        if (!maintain) { // 维护模式下不监视服务器
+            // 服务器空闲时间计时器，闲置时间过长就关服
+            let counter = setInterval(() => {
+                let timeLeft = Math.floor((maxIdlingTime - idlingTime) / 1000);
+                idlingTime += 1000;
+                if (idlingTime >= maxIdlingTime) {
+                    status.setVal('idling_time_left', -1); // 更新服务器剩余闲置时间
+                    clearInterval(counter); // 停止计时器
+                    // 进入接下来的关服流程
+                    resolve('Minecraft Server idle for too long.');
+                } else {
+                    status.setVal('idling_time_left', timeLeft); // 更新服务器剩余闲置时间
+                }
+            }, 1000);
+            // 
+        }
+        // 接受用户手动关服请求
     });
 }
 
