@@ -18,7 +18,7 @@ function execScripts(scripts, env, cwd) {
         runTasks = (index = 0) => { // 逐个执行bash脚本任务
             return tasks[index]().then(res => {
                 if (index < tasks.length - 1) {
-                    return finishTask(index + 1);
+                    return runTasks(index + 1);
                 } else {
                     return Promise.resolve();
                 }
@@ -37,7 +37,7 @@ function execScripts(scripts, env, cwd) {
                 if (err) {
                     rej(err + '\nINS_STDOUT:' + stdout + '\nINS_STDERR:' + stderr + '\n-----------\n'); // 错误留给上层处理
                 } else {
-                    console.log(`nINS_STDOUT: ${stdout}\nINS_STDERR: ${stderr}\n------------------\n`);
+                    console.log(`\nINS_STDOUT: ${stdout}\nINS_STDERR: ${stderr}\n------------------\n`);
                     res();
                 }
             })

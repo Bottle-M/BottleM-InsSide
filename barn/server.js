@@ -6,7 +6,6 @@ const utils = require('./utils');
 const configs = require('./configs-recv');
 const status = require('./status-handler');
 const logger = require('./logger');
-const { exec } = require('child_process');
 
 /**
  * 开始部署服务器
