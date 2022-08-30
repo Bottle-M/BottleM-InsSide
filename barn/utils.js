@@ -4,14 +4,55 @@ const { readdirSync, writeFileSync, rmSync, statSync, mkdirSync } = require('fs'
 const path = require('path');
 const workDir = process.cwd();
 const lockFilePath = path.join(workDir, 'deploy.lock');
+const { exec } = require('child_process');
 
 /**
- * 扫描目录的总大小
+ * 执行一组bash脚本
+ * @param {Array} scripts bash脚本的**绝对路径**组成的数组
+ * @param {Object} env 环境变量对象 
+ * @param {String} cwd bash脚本执行所在工作目录
+ * @returns {Promise}
+ */
+function execScripts(scripts, env, cwd) {
+    let tasks = [], // 任务队列
+        runTasks = (index = 0) => { // 逐个执行bash脚本任务
+            return tasks[index]().then(res => {
+                if (index < tasks.length - 1) {
+                    return finishTask(index + 1);
+                } else {
+                    return Promise.resolve();
+                }
+            });
+        };
+    for (let i = 0, len = scripts.length; i < len; i++) {
+        let absPath = scripts[i]; // 获得脚本的绝对路径
+        tasks.push(() => new Promise((res, rej) => {
+            console.log(`Executing: ${absPath}`);
+            exec(absPath, {
+                cwd: cwd, // 执行脚本的目录
+                env: env,
+                shell: '/bin/bash', // 指定bash解释器
+                encoding: 'utf-8'
+            }, (err, stdout, stderr) => {
+                if (err) {
+                    rej(err + '\nINS_STDOUT:' + stdout + '\nINS_STDERR:' + stderr + '\n-----------\n'); // 错误留给上层处理
+                } else {
+                    console.log(`nINS_STDOUT: ${stdout}\nINS_STDERR: ${stderr}\n------------------\n`);
+                    res();
+                }
+            })
+        }));
+    }
+    return runTasks();
+}
+
+/**
+ * 计算目录的总大小
  * @param {String} dirPath 目录路径
  * @returns {Number} 目录大小(In Bytes)
  * @note 非递归算法
  */
-function scanDirSize(dirPath) {
+function calcDirSize(dirPath) {
     let scanStack = [dirPath]; // 扫描栈
     let totalSize = 0; // 目录总大小(In Bytes)
     try {
@@ -169,6 +210,7 @@ module.exports = {
     deployed,
     dirCheck,
     showMemUsage,
-    scanDirSize,
-    scanDirMTime
+    calcDirSize,
+    scanDirMTime,
+    execScripts
 }

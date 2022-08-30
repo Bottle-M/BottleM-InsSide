@@ -28,25 +28,15 @@ try {
  * @returns {Boolean} 是否成功
  */
 function setVal(keys, values) {
-    return jsons.scSet(statusFilePath, 'idling_time_left', timeLeft);
+    return jsons.scSet(statusFilePath, keys, values);
 }
 
 /**
- * （同步）获得Status文件的值
- * @param {String} key 获取的值对应的键名 
- * @returns 值或者null
- */
-function getVal(key) {
-    let obj = jsons.scRead(statusFilePath);
-    return obj ? obj[key] : null;
-}
-
-/**
- * （异步）设置状态码
+ * （同步）设置状态码
  * @param {Number} code 状态代号
  * @returns {Boolean} 是否成功
  */
-function set(code) {
+function update(code) {
     // 顺带和主控端进行状态码同步.
     wsSender.send({
         'action': 'status_sync',
@@ -56,11 +46,11 @@ function set(code) {
 }
 
 /**
- * （同步）获得状态信息
+ * （同步）获得Status文件的值
  * @param {String} key 要获得的值对应的键
  * @returns 返回key对应的值或整个状态文件对象，获取错误会返回null
  */
-function get(key = '') {
+function getVal(key = '') {
     let status = jsons.scRead(statusFilePath);
     if (status) {
         return key ? status[key] : status;
@@ -70,8 +60,7 @@ function get(key = '') {
 }
 
 module.exports = {
-    set,
-    get,
-    setVal,
-    getVal
+    update,
+    getVal,
+    setVal
 }

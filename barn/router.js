@@ -14,7 +14,7 @@ module.exports = function (recvObj, ws) {
         }; // 返回的对象
     switch (action) {
         case 'status_sync': // 同步状态码
-            respObj['status_code'] = status.get('status_code');
+            respObj['status_code'] = status.getVal('status_code');
             break;
     }
     ws.send(JSON.stringify(respObj)); // 发送响应

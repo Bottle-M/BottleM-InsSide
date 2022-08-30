@@ -10,9 +10,10 @@ const { exec } = require('child_process');
 
 /**
  * 开始部署服务器
+ * @param {Boolean} maintain 是否是维护模式
  * @returns {Promise}
  */
-function deploy() {
+function deploy(maintain = false) {
     if (utils.deployed()) {
         // 如果已经部署了，先查询服务器是否正常启动
         // 这种情况一般是实例端意外重启，需要恢复服务器的状态
@@ -25,69 +26,57 @@ function deploy() {
         deploy_scripts: deployScripts, // 部署脚本
         env: environment, // 环境变量
         script_exec_dir: execDir, // 脚本执行所在目录
-        packed_server_dir,
-        mc_server_dir,
+        packed_server_dir: packedServerDir, // 压缩包目录
+        check_packed_server_size: checkPackedSize, // 是否检查压缩包大小
+        mc_server_dir
     } = configs.getConfigs();
-    let tasks = []; // 任务队列
     logger.record(1, 'Start to execute deploy scripts for Minecraft Server...'); // 记录日志
-    status.set(2202); // 设置状态码为2202，表示正在部署服务器
+    status.update(2202); // 设置状态码为2202，表示正在部署服务器
     utils.lockDeploy(true); // 锁定部署，防止重复部署
     // 检查目录是否存在
     utils.dirCheck(execDir);
-    utils.dirCheck(packed_server_dir);
+    utils.dirCheck(packedServerDir);
     utils.dirCheck(mc_server_dir);
-    return new Promise((resolve, reject) => {
-        for (let i = 0, len = deployScripts.length; i < len; i++) {
-            let absPath = path.join(dataDir, deployScripts[i]); // 获得脚本的绝对路径
-            tasks.push(() => new Promise((res, rej) => {
-                console.log(`Executing: ${absPath}`);
-                exec(absPath, {
-                    cwd: execDir, // 执行脚本的目录
-                    env: environment,
-                    shell: '/bin/bash', // 指定bash解释器
-                    encoding: 'utf-8'
-                }, (err, stdout, stderr) => {
-                    if (err) {
-                        rej(err + '\nINS_STDOUT:' + stdout + '\nINS_STDERR:' + stderr + '\n-----------\n'); // 错误留给上层处理
-                    } else {
-                        console.log(`stdout: ${stdout}\nstderr: ${stderr}\n------------------\n`);
-                        res();
+    // 把每个脚本都转换成绝对路径
+    deployScripts = deployScripts.map(script => path.join(dataDir, script));
+    // 执行脚本
+    return utils.execScripts(deployScripts, environment, execDir)
+        .then(res => {
+            // 压缩包大小记录部分
+            return new Promise((resolve, reject) => {
+                // check_packed_server_size>0，说明要检查
+                // 另外，如果是维护模式，则不检查压缩包大小
+                if (!maintain && checkPackedSize > 0) {
+                    // 计算服务器启动目录
+                    let dirSize = utils.calcDirSize(packedServerDir);
+                    // 如果扫描出来发现是空目录
+                    if (dirSize === 0) {
+                        // 错误：扫描不到压缩包
+                        reject('Packed server directory is empty!');
+                        return;
                     }
-                })
-            })
-            );
-        }
-        // 逐个完成任务
-        let finishTask = (index) => {
-            return tasks[index]().then(res => {
-                if (index < tasks.length - 1) {
-                    return finishTask(index + 1);
-                } else {
-                    return Promise.resolve();
+                    // 将扫描出来的压缩包大小写入状态文件
+                    status.setVal('previous_packed_size', dirSize);
                 }
+                resolve();
             });
-        };
-        finishTask(0).then(success => {
-            resolve();
-        }).catch(e => {
-            reject(e);
+        }).then(res => {
+            utils.showMemUsage();
+            return Promise.resolve(false);
         });
-    }).then(res => {
-        utils.showMemUsage();
-        return Promise.resolve(false);
-    });
 }
 
 /**
  * 等待服务器启动
  * @param {Boolean} resume 是否是恢复模式
+ * @param {Boolean} maintain 是否是维护模式
  * @returns {Promise}
  * @note 实例端重启后如果有部署锁，会以resume=true的方式进入这个函数，如果服务器未启动，会重新尝试启动
  */
-function waiter(resume = false) {
+function waiter(resume = false, maintain = false) {
     // Minecraft服务器启动超时时间
     let launchTimeout = configs.getConfigs('mc_server_launch_timeout');
-    status.set(2203); // 设置状态码为2203，表示等待Minecraft服务器启动
+    status.update(2203); // 设置状态码为2203，表示等待Minecraft服务器启动
     return new Promise((resolve, reject) => {
         // 等待Minecraft服务器启动，轮询间隔为10s
         const interval = 10000;
@@ -102,12 +91,12 @@ function waiter(resume = false) {
                     clearInterval(timer); // 停止轮询
                     resolve(); // 进入下一个流程
                 }).catch(err => {
+                    clearInterval(timer); // 停止轮询
                     if (spend >= launchTimeout) { // 超时
-                        clearInterval(timer); // 停止轮询
                         reject('Minecraft Server launch timeout!');
                     } else if (resume) {
                         utils.lockDeploy(false); // 解锁部署
-                        resolve(deploy()); // 尝试重新部署服务器
+                        resolve(deploy(maintain)); // 尝试重新部署服务器
                     }
                 });
             }, interval);
@@ -121,7 +110,7 @@ function waiter(resume = false) {
  */
 function monitor(maintain = false) {
     console.log('Server Successfully Deployed!');
-    status.set(2300); // 设置状态码为2300，表示服务器成功部署
+    status.update(2300); // 设置状态码为2300，表示服务器成功部署
     let {
         server_idling_timeout: maxIdlingTime, // 服务器最长空闲时间
         player_leaver_reset_timeout: resetTimeAfterLeave // 玩家离开后重置时间
@@ -155,8 +144,8 @@ function monitor(maintain = false) {
  */
 function setup(maintain = false) {
     utils.showMemUsage();
-    deploy()
-        .then(resume => waiter(resume)) // 等待Minecraft服务器启动
+    deploy(maintain)
+        .then(resume => waiter(resume, maintain)) // 等待Minecraft服务器启动
         .then(res => monitor(maintain)) // 部署成功后由monitor监视Minecraft服务器
         .catch(err => { // 错误处理
             // 通过logger模块提醒主控端，这边发生了错误！
