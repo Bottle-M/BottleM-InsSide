@@ -90,10 +90,12 @@ function waiter(resume = false, maintain = false) {
                     clearInterval(timer); // 停止轮询
                     resolve(); // 进入下一个流程
                 }).catch(err => {
-                    clearInterval(timer); // 停止轮询
+                    // 这里clearInterval必须分开写
                     if (spend >= launchTimeout) { // 超时
+                        clearInterval(timer); // 停止轮询
                         reject('Minecraft Server launch timeout!');
                     } else if (resume) {
+                        clearInterval(timer); // 停止轮询
                         utils.lockDeploy(false); // 解锁部署
                         resolve(deploy(maintain)); // 尝试重新部署服务器
                     }
