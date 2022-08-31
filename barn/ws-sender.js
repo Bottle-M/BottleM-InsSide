@@ -23,6 +23,15 @@ function get() {
     return null;
 }
 
+/**
+ * 流程走完，向主控端说再见
+ */
+function goodbye() {
+    let ws = get();
+    if (ws) {
+        ws.close(1001, 'Goodbye');
+    }
+}
 
 /**
  * 通过主WebSocket发送数据，如果未发送成功会伺机重新发送
@@ -47,5 +56,6 @@ function send(respObj) {
 module.exports = {
     set,
     get,
-    send
+    send,
+    goodbye
 }

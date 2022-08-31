@@ -2,25 +2,30 @@
 'use strict';
 const { readdirSync, writeFileSync, rmSync, statSync, mkdirSync, promises: fs } = require('fs');
 const path = require('path');
+const configs = require('./configs-recv');
 const workDir = process.cwd();
 const lockFilePath = path.join(workDir, 'deploy.lock');
 const { exec } = require('child_process');
 
 /**
  * 执行一组bash脚本
- * @param {Array} scripts bash脚本的**绝对路径**组成的数组
- * @param {Object} env 环境变量对象 
+ * @param {String|Array} scripts bash脚本的**绝对路径**或bash脚本的绝对路径组成的数组
  * @param {String} cwd bash脚本执行所在工作目录
- * @returns {Promise}
+ * @returns {Promise} resolve标准输出stdout组成的数组，元素顺序和传入的脚本顺序一致
+ * @note 会自动从配置中读取环境变量
  */
-function execScripts(scripts, env, cwd) {
+function execScripts(scripts, cwd) {
+    if (!Array.isArray(scripts)) scripts = [scripts];
     let tasks = [], // 任务队列
+        env = configs.getConfigs('env'), // 环境变量
+        resultStdouts = [], // 执行结果的标准输出
         runTasks = (index = 0) => { // 逐个执行bash脚本任务
-            return tasks[index]().then(res => {
+            return tasks[index]().then(stdout => {
+                resultStdouts.push(stdout); // 记录标准输出
                 if (index < tasks.length - 1) {
                     return runTasks(index + 1);
                 } else {
-                    return Promise.resolve();
+                    return Promise.resolve(resultStdouts);
                 }
             });
         };
@@ -38,7 +43,7 @@ function execScripts(scripts, env, cwd) {
                     rej(err + '\nINS_STDOUT:' + stdout + '\nINS_STDERR:' + stderr + '\n-----------\n'); // 错误留给上层处理
                 } else {
                     console.log(`\nINS_STDOUT: ${stdout}\nINS_STDERR: ${stderr}\n------------------\n`);
-                    res();
+                    res(stdout);
                 }
             })
         }));
