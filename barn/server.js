@@ -24,6 +24,7 @@ function deploy(maintain = false) {
     let {
         remote_dir: dataDir, // 数据目录
         deploy_scripts: deployScripts, // 部署脚本
+        env: environments, // 环境变量
         script_exec_dir: execDir, // 脚本执行所在目录
         packed_server_dir: packedServerDir, // 压缩包目录
         check_packed_server_size: checkPackedSize, // 是否检查压缩包大小
@@ -39,7 +40,7 @@ function deploy(maintain = false) {
     // 把每个脚本都转换成绝对路径
     deployScripts = deployScripts.map(script => path.join(dataDir, script));
     // 执行脚本
-    return utils.execScripts(deployScripts, execDir)
+    return utils.execScripts(deployScripts, environments, execDir)
         .then(res => {
             // 压缩包大小记录部分
             return new Promise((resolve, reject) => {
@@ -116,6 +117,7 @@ function monitor(maintain = false) {
     let {
         remote_dir: dataDir, // 数据目录
         server_scripts: serverScripts, // Minecraft服务器相关脚本
+        env: environments, // 环境变量
         script_exec_dir: execDir, // 脚本执行所在目录
         server_idling_timeout: maxIdlingTime, // 服务器最长空闲时间
         player_login_reset_timeout: resetTimeAfterLogin // 玩家离开后重置时间
@@ -176,7 +178,7 @@ function monitor(maintain = false) {
             // 监视Java进程(轮询周期5秒)
             processMonitor = setInterval(() => {
                 let scriptPath = path.join(dataDir, serverScripts['check_process']);
-                utils.execScripts(scriptPath, execDir)
+                utils.execScripts(scriptPath, environments, execDir)
                     .then(stdouts => {
                         // 如果脚本执行没有输出任何内容，则表示服务器已经关闭
                         if (/^\s*$/.test(stdouts[0])) {
@@ -224,11 +226,12 @@ function packServer(reason, urgent = false, maintain = false) {
         let {
             script_exec_dir: execDir, // 脚本执行所在目录
             packed_server_dir: packedServerDir, // 压缩包目录
+            env: environments,// 环境变量
             check_packed_server_size: checkPackedSize, // 检查压缩包大小百分比
             server_ending_scripts: endingScripts // 服务器关闭流程的脚本
         } = configs.getConfigs();
         // 执行压缩打包脚本
-        return utils.execScripts(endingScripts['pack'], execDir)
+        return utils.execScripts(endingScripts['pack'], environments, execDir)
             .then(stdouts => {
                 return new Promise((resolve, reject) => {
                     // 非维护模式，且配置了check_packed_server_size
@@ -248,7 +251,7 @@ function packServer(reason, urgent = false, maintain = false) {
             }).then(res => {
                 status.update(2401); // 更新状态：服务器正准备关闭-上传中
                 // 压缩包没有问题，开始上传
-                return utils.execScripts(endingScripts['upload'], execDir);
+                return utils.execScripts(endingScripts['upload'], environments, execDir);
             })
     }
 }
