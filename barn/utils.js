@@ -1,6 +1,6 @@
 // 能用到的工具函数或者属性
 'use strict';
-const { readdirSync, writeFileSync, rmSync, statSync, mkdirSync } = require('fs');
+const { readdirSync, writeFileSync, rmSync, statSync, mkdirSync, promises: fs } = require('fs');
 const path = require('path');
 const workDir = process.cwd();
 const lockFilePath = path.join(workDir, 'deploy.lock');
@@ -47,7 +47,23 @@ function execScripts(scripts, env, cwd) {
 }
 
 /**
- * 计算目录的总大小
+ * （异步）清除目录中所有内容
+ * @param {String} dirPath 目录路径
+ */
+function clearDir(dirPath) {
+    fs.readdir(dirPath).then(files => {
+        return new Promise((resolve, reject) => {
+            for (let i = 0, len = files.length; i < len; i++) {
+                rmSync(path.join(dirPath, files[i]), {
+                    recursive: true // 支持深层目录
+                })
+            }
+        });
+    });
+}
+
+/**
+ * （同步）计算目录的总大小
  * @param {String} dirPath 目录路径
  * @returns {Number} 目录大小(In Bytes)
  * @note 非递归算法
@@ -78,7 +94,7 @@ function calcDirSize(dirPath) {
 }
 
 /**
- * 扫描/对比目录中每个文件的修改时间
+ * （同步）扫描/对比目录中每个文件的修改时间
  * @param {String} dirPath 扫描的目录路径
  * @param {Object} compareObj 旧的修改时间信息对象（用于对比）
  * @returns {Object} 一个包含文件修改时间信息的对象
@@ -212,5 +228,6 @@ module.exports = {
     showMemUsage,
     calcDirSize,
     scanDirMTime,
-    execScripts
+    execScripts,
+    clearDir
 }

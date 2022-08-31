@@ -56,6 +56,7 @@ function deploy(maintain = false) {
                     }
                     // 将扫描出来的压缩包大小写入状态文件
                     status.setVal('previous_packed_size', dirSize);
+                    utils.clearDir(packedServerDir); // 清空目录
                 }
                 resolve();
             });
@@ -78,7 +79,7 @@ function waiter(resume = false, maintain = false) {
     status.update(2203); // 设置状态码为2203，表示等待Minecraft服务器启动
     return new Promise((resolve, reject) => {
         // 等待Minecraft服务器启动，轮询间隔为10s
-        const interval = 10000;
+        const interval = 6000;
         let spend = 0, // 花费的时间
             timer = setInterval(() => {
                 spend += interval;
@@ -90,7 +91,7 @@ function waiter(resume = false, maintain = false) {
                     clearInterval(timer); // 停止轮询
                     resolve(); // 进入下一个流程
                 }).catch(err => {
-                    // 这里clearInterval必须分开写
+                    // 这里clearInterval必须分开写，err只是代表本次ping失败，还要继续ping下去
                     if (spend >= launchTimeout) { // 超时
                         clearInterval(timer); // 停止轮询
                         reject('Minecraft Server launch timeout!');

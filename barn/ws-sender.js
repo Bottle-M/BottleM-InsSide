@@ -17,7 +17,7 @@ function set(ws) {
  */
 function get() {
     let ws = mainConnection;
-    if (ws && ws.connAlive) {
+    if (ws && ws.connAlive && ws.authorized) {
         return ws;
     }
     return null;

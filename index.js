@@ -39,6 +39,11 @@ wsServer.on('connection', (ws) => {
             authedConn = ws; // 记录认证连接
             router(parsed, ws); // 路由
         }).on('close', () => {
+            if (ws.authorized) { // 关闭的连接是通过验证的
+                ws.connAlive = false; // 标记连接已经死亡
+                authedConn = null; // 清除认证连接
+                console.log('Main connection destroyed');
+            }
             console.log('Connection closed');
         }).on('pong', wsBeat.bind(ws)); // 接受心跳（pong是为响应ping而自动发送的）
     } else { // 已经有验证通过的连接了，直接关闭
