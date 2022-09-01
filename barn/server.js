@@ -224,12 +224,17 @@ function packServer(reason, urgent = false, maintain = false) {
     if (!urgent) {
         // 普通情况下的关服
         let {
+            remote_dir: dataDir, // 数据目录
             script_exec_dir: execDir, // 脚本执行所在目录
             packed_server_dir: packedServerDir, // 压缩包目录
             env: environments,// 环境变量
             check_packed_server_size: checkPackedSize, // 检查压缩包大小百分比
             server_ending_scripts: endingScripts // 服务器关闭流程的脚本
         } = configs.getConfigs();
+        // 打包脚本全部转换为绝对路径
+        for (let i in endingScripts) {
+            endingScripts[i] = path.join(dataDir, endingScripts[i]);
+        }
         // 执行压缩打包脚本
         return utils.execScripts(endingScripts['pack'], environments, execDir)
             .then(stdouts => {
