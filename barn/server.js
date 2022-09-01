@@ -173,7 +173,7 @@ function monitor(maintain = false) {
                         'online': playersOnline,
                         'max': playersMax
                     });
-                }).catch(err);
+                }).catch(err => 'nothing');
             }, 10000);
             // 监视Java进程(轮询周期5秒)
             processMonitor = setInterval(() => {
