@@ -289,7 +289,7 @@ class Server {
                 return new Promise((resolve, reject) => {
                     timer = setInterval(() => {
                         that.processCheck().then(exists => {
-                            if (!exist) {
+                            if (!exists) {
                                 // 服务器已经关闭，进入下一流程
                                 clearInterval(timer);
                                 resolve(options);
