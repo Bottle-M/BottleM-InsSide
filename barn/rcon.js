@@ -45,7 +45,7 @@ function send(cmd) {
             mainConnection.send(cmd);
             clearInterval(timer);
         }
-    }, 500);
+    }, 200);
 }
 
 module.exports = {

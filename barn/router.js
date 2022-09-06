@@ -28,6 +28,7 @@ module.exports = function (recvObj, ws) {
             break;
         case 'command': { // 向Minecraft服务器发送命令
             let { command } = data;
+            console.log(`Received command for Minecraft:${command}`);
             rcon.send(command); // 通过RCON发送命令
         }
             break;
