@@ -32,8 +32,6 @@ wsServer.on('connection', (ws) => {
                 return ws.close(1000, 'Nanoconnection, son.'); // 关闭连接
             }
             ws.authorized = true; // 通过认证
-            console.log('New authorized connection has been made.');
-            console.log(`WebSocket BufferedAmount:${ws.bufferedAmount}`);
             authedConn = ws; // 记录认证连接
             router(parsed, ws); // 路由
         }).on('close', () => {

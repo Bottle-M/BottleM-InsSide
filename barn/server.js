@@ -160,7 +160,8 @@ class Server {
      * @returns {Promise} 如果脚本什么都没有返回会resolve(false)，否则resolve(true)。执行失败会reject
      */
     scriptCheck(scriptKey = '') {
-        return utils.execScripts(this.serverScripts[scriptKey], this.execEnv, this.execDir, false)
+        let scriptPath = this.serverScripts[scriptKey];
+        return utils.execScripts(scriptPath, this.execEnv, this.execDir, false)
             .then(stdouts => {
                 // 如果脚本执行没有输出任何内容，则resolve false
                 if (/^\s*$/.test(stdouts[0])) {
@@ -328,7 +329,7 @@ class Server {
         // 检查Minecraft服务器进程是否结束(轮询周期2s)
         return new Promise((resolve, reject) => {
             timer = setInterval(() => {
-                that.scriptCheck().then(exists => {
+                that.scriptCheck('check_process').then(exists => {
                     if (!exists) {
                         // 服务器已经关闭，进入下一流程
                         clearInterval(timer);
