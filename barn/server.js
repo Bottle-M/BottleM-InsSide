@@ -155,13 +155,14 @@ class Server {
         })
     }
     /**
-     * Minecraft服务器进程检查
-     * @returns {Promise} 进程存在会resolve(true)，否则resolve(false)。执行失败会reject
+     * 执行serverScripts脚本进行检查
+     * @param {String} script serverScripts中的脚本路径对应的键
+     * @returns {Promise} 如果脚本什么都没有返回会resolve(false)，否则resolve(true)。执行失败会reject
      */
-    processCheck() {
-        return utils.execScripts(this.serverScripts['check_process'], this.execEnv, this.execDir, false)
+    scriptCheck(scriptKey = '') {
+        return utils.execScripts(this.serverScripts[scriptKey], this.execEnv, this.execDir, false)
             .then(stdouts => {
-                // 如果脚本执行没有输出任何内容，则表示服务器进程已经消失
+                // 如果脚本执行没有输出任何内容，则resolve false
                 if (/^\s*$/.test(stdouts[0])) {
                     return Promise.resolve(false);
                 }
@@ -186,7 +187,7 @@ class Server {
         } = this.configs,
             that = this;
         let idlingTime = 0; // 服务器空闲时间(ms)
-        let counter, playerMonitor, processMonitor, terminationMonitor;
+        let counter, playerMonitor, processMonitor, terminationMonitor, idlingTimeSync;
 
         // 增量备份
 
@@ -211,6 +212,13 @@ class Server {
                     };
                 // 服务器空闲时间计时器，闲置时间过长就关服
                 counter = setInterval(counterFunc, 1000);
+                // 将服务器剩余闲置时间同步到主控端
+                idlingTimeSync = setInterval(() => {
+                    wsSender.send({
+                        'action': 'idling_time_left',
+                        'time': calcTimeLeft(idlingTime)
+                    });
+                }, 5000);
                 // 玩家人数监视器（轮询周期10秒）
                 playerMonitor = setInterval(() => {
                     ping({
@@ -241,7 +249,7 @@ class Server {
                 }, 10000);
                 // 监视Java进程(轮询周期5秒)
                 processMonitor = setInterval(() => {
-                    that.processCheck().then(exists => {
+                    that.scriptCheck('check_process').then(exists => {
                         // 服务器进程不存在，进入关服流程
                         if (!exists) {
                             resolve({
@@ -257,18 +265,44 @@ class Server {
                 }, 5000);
                 // 检查竞价实例是否被回收(轮询周期6秒)
                 terminationMonitor = setInterval(() => {
-
+                    that.scriptCheck('check_termination').then(safe => {
+                        if (!safe) {
+                            // 实例即将被回收，紧急进入关服流程
+                            resolve({
+                                reason: 'The Instance WILL BE TERMINATED!',
+                                stop: true,
+                                urgent: true // 紧急情况
+                            });
+                        }
+                    }).catch(err => {
+                        console.warn(err);
+                        logger.record(2, err);
+                    });
                 }, 6000);
             }
-
-            // 接受用户手动关服请求
-
+            // 接受用户关闭服务器请求
+            utils.serverEvents.once('stop', () => {
+                resolve({
+                    reason: 'The server was closed by operator.',
+                    stop: true,
+                    urgent: false
+                });
+            });
+            // 接受用户杀死服务器请求
+            utils.serverEvents.once('kill', () => {
+                resolve({
+                    reason: 'The server was killed by operator.',
+                    stop: false, // 实际上就是不管服务器进程了，直接开始打包
+                    urgent: false
+                });
+            });
         }).then(result => {
             // 清理工作
             clearInterval(counter); // 停止计时器
             clearInterval(processMonitor);
             clearInterval(terminationMonitor);
             clearInterval(playerMonitor);
+            clearInterval(idlingTimeSync);
             return Promise.resolve(result); // result:{reason,stop,urgent}
         })
 
@@ -294,7 +328,7 @@ class Server {
         // 检查Minecraft服务器进程是否结束(轮询周期2s)
         return new Promise((resolve, reject) => {
             timer = setInterval(() => {
-                that.processCheck().then(exists => {
+                that.scriptCheck().then(exists => {
                     if (!exists) {
                         // 服务器已经关闭，进入下一流程
                         clearInterval(timer);

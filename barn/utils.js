@@ -5,6 +5,9 @@ const path = require('path');
 const workDir = process.cwd();
 const lockFilePath = path.join(workDir, 'deploy.lock');
 const { exec } = require('child_process');
+const { EventEmitter } = require('events');
+/** Server模块相关的事件*/
+const serverEvents = new EventEmitter();
 
 /**
  * 执行一组bash脚本
@@ -236,5 +239,6 @@ module.exports = {
     calcDirSize,
     scanDirMTime,
     execScripts,
-    clearDir
+    clearDir,
+    serverEvents
 }

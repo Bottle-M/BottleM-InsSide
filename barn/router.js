@@ -2,6 +2,8 @@
 'use strict';
 const status = require('./status-handler');
 const rcon = require('./rcon');
+const wsSender = require('./ws-sender');
+const utils = require('./utils');
 
 /**
  * 实例端WebSocket路由
@@ -13,13 +15,14 @@ module.exports = function (recvObj, ws) {
         respObj = {
             action: action // 继续呼应的动作
         }; // 返回的对象
+    wsSender.set(ws); // 储存主连接
     switch (action) {
         case 'status_sync': { // 同步状态码
             let statusCode = status.getVal('status_code');
             respObj['status_code'] = statusCode;
             if (statusCode === 2500) {
                 // 状态码为2500，说明实例端已经停止运行，直接say goodbye
-                ws.close(1001, 'Goodbye');
+                wsSender.goodbye();
             }
         }
             break;
@@ -28,6 +31,12 @@ module.exports = function (recvObj, ws) {
             rcon.send(command); // 通过RCON发送命令
         }
             break;
+        case 'stop':
+            utils.serverEvents.emit('stop'); // 激发停止事件
+            break;
+        case 'kill':
+            utils.serverEvents.emit('kill'); // 激发杀死事件
+            break;
     }
-    ws.send(JSON.stringify(respObj)); // 发送响应
+    wsSender.send(respObj); // 发送响应
 }
