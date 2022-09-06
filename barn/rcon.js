@@ -18,9 +18,9 @@ function make(port, password) {
             console.log('New RCON connection established.');
             mainConnection = conn; // 记录连接实例
         }).on('response', (data) => {
-            logger.record(`RCON response: ${data}`);
+            logger.record(1, `RCON response: ${data}`);
         }).on('error', (err) => {
-            logger.record(`RCON Connection Error:${err}`);
+            logger.record(2, `RCON Connection Error:${err}`);
             mainConnection = null; // 清空连接实例
             resolve(err);
         }).on('end', () => {
