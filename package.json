@@ -23,6 +23,7 @@
   "homepage": "https://github.com/SomeBottle/BottleM-InsSide#readme",
   "dependencies": {
     "minecraft-protocol": "^1.36.1",
+    "rcon": "^1.1.0",
     "ws": "^8.8.1"
   }
 }

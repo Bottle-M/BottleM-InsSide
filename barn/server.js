@@ -6,6 +6,7 @@ const utils = require('./utils');
 const configs = require('./configs-recv');
 const status = require('./status-handler');
 const logger = require('./logger');
+const rcon = require('./rcon');
 const wsSender = require('./ws-sender');
 
 class Server {
@@ -19,9 +20,11 @@ class Server {
                 remote_dir: dataDir,
                 server_scripts: serverScripts,
                 server_ending_scripts: endingScripts,
-                script_exec_dir: execDir
+                script_exec_dir: execDir,
+                rcon: rconConfigs
             } = allConfigs;
         this.configs = allConfigs;
+        this.rconConfigs = rconConfigs;
         this.maintain = maintain;
         // 脚本存放的目录
         this.dataDir = dataDir;
@@ -123,6 +126,7 @@ class Server {
         // Minecraft服务器启动超时时间
         let launchTimeout = this.configs['mc_server_launch_timeout'],
             that = this;
+        status.update(2203); // 设置状态码为2203，表示正在等待Minecraft服务器启动
         return new Promise((resolve, reject) => {
             // 等待Minecraft服务器启动，轮询间隔为10s
             const interval = 6000;
@@ -174,6 +178,8 @@ class Server {
     monitor() {
         console.log('Server Successfully Deployed!');
         status.update(2300); // 设置状态码为2300，表示服务器成功部署
+        // 开启RCON连接
+        rcon.make(this.rconConfigs['port'], this.rconConfigs['password']);
         let {
             server_idling_timeout: maxIdlingTime, // 服务器最长空闲时间
             player_login_reset_timeout: resetTimeAfterLogin // 玩家离开后重置时间
@@ -281,28 +287,25 @@ class Server {
             return Promise.resolve(options);
         }
         let timer;
-        return utils.execScripts(this.serverScripts['stop_server'], this.execEnv, this.execDir)
-            .then(stdouts => {
-                // 更新状态：服务器正准备关闭-关闭Minecraft服务器中
-                status.update(2400);
-                // 检查Minecraft服务器进程是否结束(轮询周期2s)
-                return new Promise((resolve, reject) => {
-                    timer = setInterval(() => {
-                        that.processCheck().then(exists => {
-                            if (!exists) {
-                                // 服务器已经关闭，进入下一流程
-                                clearInterval(timer);
-                                resolve(options);
-                            }
-                        }).catch(err => {
-                            console.warn(err);
-                            logger.record(2, err);
-                        });
-                    }, 2000);
+        // 更新状态：服务器正准备关闭-关闭Minecraft服务器中
+        status.update(2400);
+        // 通过rcon关闭服务器
+        rcon.send('stop');
+        // 检查Minecraft服务器进程是否结束(轮询周期2s)
+        return new Promise((resolve, reject) => {
+            timer = setInterval(() => {
+                that.processCheck().then(exists => {
+                    if (!exists) {
+                        // 服务器已经关闭，进入下一流程
+                        clearInterval(timer);
+                        resolve(options);
+                    }
+                }).catch(err => {
+                    console.warn(err);
+                    logger.record(2, err);
                 });
-            }).catch(err => {
-                return Promise.reject(err);
-            });
+            }, 2000);
+        });
     }
 
     /**

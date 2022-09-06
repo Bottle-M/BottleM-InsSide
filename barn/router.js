@@ -1,6 +1,7 @@
 // 实例端的WebSocket路由
 'use strict';
 const status = require('./status-handler');
+const rcon = require('./rcon');
 
 /**
  * 实例端WebSocket路由
@@ -15,6 +16,11 @@ module.exports = function (recvObj, ws) {
     switch (action) {
         case 'status_sync': // 同步状态码
             respObj['status_code'] = status.getVal('status_code');
+            break;
+        case 'command': { // 向Minecraft服务器发送命令
+            let { command } = data;
+            rcon.send(command); // 通过RCON发送命令
+        }
             break;
     }
     ws.send(JSON.stringify(respObj)); // 发送响应
