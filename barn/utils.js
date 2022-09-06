@@ -11,10 +11,11 @@ const { exec } = require('child_process');
  * @param {String|Array} scripts bash脚本的**绝对路径**或bash脚本的绝对路径组成的数组
  * @param {Object} env 环境变量对象
  * @param {String} cwd bash脚本执行所在工作目录
+ * @param {Boolean} showInfo 是否显示执行信息
  * @returns {Promise} resolve标准输出stdout组成的数组，元素顺序和传入的脚本顺序一致
  * @note 会自动从配置中读取环境变量
  */
-function execScripts(scripts, env, cwd) {
+function execScripts(scripts, env, cwd, showInfo = true) {
     if (!Array.isArray(scripts)) scripts = [scripts];
     let tasks = [], // 任务队列
         resultStdouts = [], // 执行结果的标准输出
@@ -41,7 +42,8 @@ function execScripts(scripts, env, cwd) {
                 if (err) {
                     rej(err + '\nINS_STDOUT:' + stdout + '\nINS_STDERR:' + stderr + '\n-----------\n'); // 错误留给上层处理
                 } else {
-                    console.log(`\nINS_STDOUT: ${stdout}\nINS_STDERR: ${stderr}\n------------------\n`);
+                    if (showInfo)
+                        console.log(`\nINS_STDOUT: ${stdout}\nINS_STDERR: ${stderr}\n------------------\n`);
                     res(stdout);
                 }
             })

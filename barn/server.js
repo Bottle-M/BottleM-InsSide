@@ -159,7 +159,7 @@ class Server {
      * @returns {Promise} 进程存在会resolve(true)，否则resolve(false)。执行失败会reject
      */
     processCheck() {
-        return utils.execScripts(this.serverScripts['check_process'], this.execEnv, this.execDir)
+        return utils.execScripts(this.serverScripts['check_process'], this.execEnv, this.execDir, false)
             .then(stdouts => {
                 // 如果脚本执行没有输出任何内容，则表示服务器进程已经消失
                 if (/^\s*$/.test(stdouts[0])) {
@@ -357,6 +357,7 @@ class Server {
      * 服务器关闭，结束本次流程
      */
     terminate() {
+        status.update(2500); // 更新状态：实例端中止
         // 向主控端发送告别指令，主控端将断开连接
         wsSender.goodbye();
     }

@@ -14,8 +14,14 @@ module.exports = function (recvObj, ws) {
             action: action // 继续呼应的动作
         }; // 返回的对象
     switch (action) {
-        case 'status_sync': // 同步状态码
-            respObj['status_code'] = status.getVal('status_code');
+        case 'status_sync': { // 同步状态码
+            let statusCode = status.getVal('status_code');
+            respObj['status_code'] = statusCode;
+            if (statusCode === 2500) {
+                // 状态码为2500，说明实例端已经停止运行，直接say goodbye
+                ws.close(1001, 'Goodbye');
+            }
+        }
             break;
         case 'command': { // 向Minecraft服务器发送命令
             let { command } = data;
