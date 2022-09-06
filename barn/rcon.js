@@ -30,7 +30,8 @@ function make(port, password) {
             setTimeout(() => {
                 resolve(make(port, password));
             }, 2000);
-        })
+        });
+        conn.connect();
     });
 }
 

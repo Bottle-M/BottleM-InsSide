@@ -29,7 +29,6 @@ wsServer.on('connection', (ws) => {
                 secret = configs.getConfigs('secret_key');
             // 每条通信都必须要经过密匙验证
             if (!secret || parsed['key'] !== secret) {
-                ws.authorized = false; // 认证不通过
                 return ws.close(1000, 'Nanoconnection, son.'); // 关闭连接
             }
             ws.authorized = true; // 通过认证

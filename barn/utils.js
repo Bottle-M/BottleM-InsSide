@@ -32,7 +32,8 @@ function execScripts(scripts, env, cwd, showInfo = true) {
     for (let i = 0, len = scripts.length; i < len; i++) {
         let absPath = scripts[i]; // 获得脚本的绝对路径
         tasks.push(() => new Promise((res, rej) => {
-            console.log(`Executing: ${absPath}`);
+            if (showInfo)
+                console.log(`Executing: ${absPath}`);
             exec(absPath, {
                 cwd: cwd, // 执行脚本的目录
                 env: env,
