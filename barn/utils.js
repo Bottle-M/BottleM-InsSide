@@ -32,6 +32,8 @@ function execScripts(scripts, env, cwd, showInfo = true) {
                 }
             });
         };
+    // 新增一个毫秒时间戳环境变量TIMESTAMP
+    env['TIMESTAMP'] = Date.now();
     for (let i = 0, len = scripts.length; i < len; i++) {
         let absPath = scripts[i]; // 获得脚本的绝对路径
         tasks.push(() => new Promise((res, rej) => {
@@ -73,6 +75,14 @@ function clearDir(dirPath) {
 }
 
 /**
+ * 根据目录生成一个Key
+ * @param {String} dirPath 目录绝对路径
+ */
+function dirKey(dirPath) {
+    return dirPath.split(/[/\\]/).filter(x => !(/^\s*$/.test(x))).join('-');
+}
+
+/**
  * （同步）计算目录的总大小
  * @param {String} dirPath 目录路径
  * @returns {Number} 目录大小(In Bytes)
@@ -107,44 +117,40 @@ function calcDirSize(dirPath) {
  * （同步）扫描/对比目录中每个文件的修改时间
  * @param {String} dirPath 扫描的目录路径
  * @param {Object} compareObj 旧的修改时间信息对象（用于对比）
- * @returns {Object} 一个包含文件修改时间信息的对象
- * @note 递归算法。当compareObj不传入时，就是扫描所有文件的修改时间并返回对象。
+ * @returns {Object} 一个包含文件修改时间信息的对象，失败了会返回null
+ * @note 当compareObj不传入时，就是扫描所有文件的修改时间并返回对象。
  * @note 当传入compareObj时，会对比找出修改时间变化的文件(或新建的文件)，并返回对象。
+ * @note 每一个文件对应的值是数组 [修改时间,文件路径]
  * @note 注：对比结果是不包括删除了的文件的，用于增量备份
  */
 function scanDirMTime(dirPath, compareObj = null) {
     let outputObj = new Object(); // 结果对象
+    let scanStack = [dirPath]; // 扫描栈
     try {
-        let files = readdirSync(dirPath);
-        for (let i = 0, len = files.length; i < len; i++) {
-            let fileName = files[i],
-                filePath = path.join(dirPath, fileName),
-                fileStat = statSync(filePath);
+        while (scanStack.length > 0) { // 在栈没有清空前不停循环
+            let filePath = scanStack.pop(), // 弹出栈顶元素
+                fileStat = statSync(filePath); // 获取文件信息
             if (fileStat.isDirectory()) {
-                // 如果是目录，则递归扫描
-                if (compareObj) {
-                    if (!compareObj[fileName]) {
-                        // 如果对比对象中不存在该目录，则将目录中所有文件加入
-                        outputObj[fileName] = scanDirMTime(filePath);
-                    } else {
-                        // 如果对比对象中存在该目录，则compareObj深度加深进入递归
-                        outputObj[fileName] = scanDirMTime(filePath, compareObj[fileName]);
-                    }
-                } else {
-                    // 正常的扫描，递归
-                    outputObj[fileName] = scanDirMTime(filePath);
+                // 如果是目录，则进行扫描，将子文件/目录压入栈中
+                let dirFiles = readdirSync(filePath);
+                for (let i = 0, len = dirFiles.length; i < len; i++) {
+                    scanStack.push(path.join(filePath, dirFiles[i]));
                 }
             } else {
-                // 如果是文件，则直接记录修改时间mtime(这个是一个Date对象)
-                if (!(compareObj && compareObj[fileName] === fileStat.mtime.getTime())) {
-                    // 如果是正常扫描/对比的时候文件时间不相等，则记录文件修改时间
-                    outputObj[fileName] = fileStat.mtime.getTime();
-                }
+                // 是文件
+                let key = dirKey(filePath),
+                    mTime = fileStat.mtime.getTime();
+                // 没有要对照的对象(全部扫描)，或寻找有修改过的文件
+                if (!(compareObj && compareObj[key] && compareObj[key][0] === mTime))
+                    outputObj[key] = [
+                        mTime,
+                        filePath
+                    ]; // [修改时间, 文件路径]
             }
         }
     } catch (e) {
         console.log(`Error occured while scanning ${dirPath}: ${e}`);
-        return 0;
+        return null;
     }
     return outputObj;
 }
@@ -240,5 +246,6 @@ module.exports = {
     scanDirMTime,
     execScripts,
     clearDir,
+    dirKey,
     serverEvents
 }

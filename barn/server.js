@@ -1,35 +1,37 @@
 // 服务器部署/监控部分
 'use strict';
+const { writeFileSync, copyFileSync } = require('fs');
 const { ping } = require('minecraft-protocol');
 const path = require('path');
 const utils = require('./utils');
+const jsons = require('./json-scaffold');
 const configs = require('./configs-recv');
 const status = require('./status-handler');
 const logger = require('./logger');
 const rcon = require('./rcon');
 const wsSender = require('./ws-sender');
 
-class Server {
+class ServerBase {
     /**
-     * 构造Server实例
-     * @param {Boolean} maintain 是否是维护模式
+     * Minecraft服务器部署基类
+     * @note 构造器主要用于初始化配置
      */
-    constructor(maintain = false) {
+    constructor() {
         let allConfigs = configs.getConfigs(),
             {
                 remote_dir: dataDir,
                 server_scripts: serverScripts,
                 server_ending_scripts: endingScripts,
                 script_exec_dir: execDir,
-                rcon: rconConfigs
+                rcon: rconConfigs,
+                env
             } = allConfigs;
         this.configs = allConfigs;
         this.rconConfigs = rconConfigs;
-        this.maintain = maintain;
         // 脚本存放的目录
         this.dataDir = dataDir;
         // 脚本执行时的环境变量
-        this.execEnv = allConfigs['env'];
+        this.execEnv = env;
         // 脚本执行所在目录
         this.execDir = execDir;
         // 处理部署脚本路径为绝对路径
@@ -42,8 +44,146 @@ class Server {
         this.endingScripts = new Object();
         for (let i in endingScripts)
             this.endingScripts[i] = path.join(dataDir, endingScripts[i]);
+    }
+}
+
+class IncBackup extends ServerBase {
+    /**
+     * 构造增量备份实例
+     */
+    constructor() {
+        super();
+        // 读取增量备份相关配置
+        let {
+            enable,
+            dest_dir,
+            scripts,
+            src_dirs
+        } = this.configs['incremental_backup'];
+        let backupDestDir = path.join(dest_dir, './backup'), // 备份用目录
+            restoreDestDir = path.join(dest_dir, './restore'); // 恢复用目录
+        this.enable = enable;
+        this.destDir = dest_dir;
+        this.scripts = scripts;
+        this.srcDirs = src_dirs;
+        this.backupDestDir = backupDestDir;
+        this.restoreDestDir = restoreDestDir;
+        // 标记仍未初始化
+        this.initialized = false;
+        // 检查目录是否存在，不存在则创建
+        utils.dirCheck(dest_dir);
+        utils.dirCheck(backupDestDir);
+        utils.dirCheck(restoreDestDir);
+    }
+    /**
+     * （异步）初始化（扫描所有srcDirs中的文件，记录最初的mtime）
+     * @returns {Promise}
+     */
+    init() {
+        let that = this;
+        // 未开启增量备份功能或者已经初始化过了
+        if (!this.enable || this.initialized)
+            return Promise.resolve();
+        return new Promise((resolve, reject) => {
+            // 遍历待备份的目录
+            for (let i = 0, len = that.srcDirs.length; i < len; i++) {
+                let dirPath = that.srcDirs[i],
+                    backupKey = utils.dirKey(dirPath), // 备份标识
+                    // 备份标识名
+                    backupDir = path.join(that.backupDestDir, backupKey),
+                    mTimeFile = path.join(that.backupDestDir, `${backupKey}.json`), // 记录修改日期的文件
+                    copyPathFile = path.join(that.backupDestDir, `${backupKey}-copied.json`); // 记录复制文件对应路径的文件
+                // 检查备份目录是否存在，不存在则创建
+                utils.dirCheck(backupDir);
+                // 扫描目标目录，记录所有文件的mtime
+                let mTimeObj = utils.scanDirMTime(dirPath);
+                if (!mTimeObj) {
+                    reject(`Failed to scan directory ${dirPath}`);
+                    return;
+                }
+                // 写入修改日期记录文件
+                writeFileSync(mTimeFile, JSON.stringify(mTimeObj));
+            }
+            // 初始化完成
+            that.initialized = true;
+            resolve();
+        });
+    }
+    /**
+     * （异步）执行一次增量备份
+     * @returns {Promise}
+     * @note 前提：已经初始化过
+     */
+    make() {
+        // 未开启增量备份功能或者未初始化
+        if (!this.enable || !this.initialized)
+            return Promise.resolve();
+        return new Promise((resolve, reject) => {
+            // 遍历待备份的目录
+            for (let i = 0, len = that.srcDirs.length; i < len; i++) {
+                let srcDirPath = that.srcDirs[i],
+                    backupKey = utils.dirKey(srcDirPath), // 备份标识
+                    // 备份标识名
+                    backupDir = path.join(that.backupDestDir, backupKey),
+                    mTimeFile = path.join(that.backupDestDir, `${backupKey}.json`), // 记录修改日期的文件
+                    copyPathFile = path.join(that.backupDestDir, `${backupKey}-copied.json`); // 记录复制文件对应路径的文件
+                // 扫描目标目录，查看有哪些文件更新了
+                let prevObj = jsons.scRead(mTimeFile) || {}, // 读取上次备份时的mtime记录
+                    diffObj = utils.scanDirMTime(srcDirPath, prevObj); // 扫描目标目录，查看有哪些文件更新了
+                // 扫描失败
+                if (!diffObj) {
+                    reject(`Failed to scan directory ${srcDirPath}`);
+                    return;
+                }
+                try {
+                    let destDirCache = ''; // 目标目录缓存，免得多次dirCheck
+                    // 复制更新的文件到备份目录
+                    for (let key in diffObj) {
+                        let filePath = diffObj[key][1],
+                            // 复制到的目标路径
+                            destPath = path.join(backupDir,
+                                // 获得文件相对于srcDirPath的路径
+                                path.relative(srcDirPath, filePath)
+                            ),
+                            // 待复制文件的目标目录
+                            destDir = path.dirname(destPath);
+                        // 如果最近检查过目标目录，则不再检查
+                        if (destDirCache !== destDir) {
+                            // 检查目标目录是否存在，不存在则创建
+                            utils.dirCheck(destDir);
+                            destDirCache = destDir;
+                        }
+                        // 复制文件
+                        copyFileSync(filePath, destPath);
+                        // 更新修改日期记录对象
+                        prevObj[key] = diffObj[key];
+                    }
+                    // 将变更的修改日期写入修改日期记录文件
+                    writeFileSync(mTimeFile, JSON.stringify(prevObj));
+                } catch (e) {
+                    reject(`Error occured while copying files: ${e}`);
+                    return;
+                }
+            }
+            // 初始化完成
+            that.initialized = true;
+            resolve();
+        });
+    }
+}
+
+class Server extends ServerBase {
+    /**
+     * 构造Server实例
+     * @param {Boolean} maintain 是否是维护模式
+     */
+    constructor(maintain = false) {
+        super();
+        this.maintain = maintain;
+        // 创建增量备份的实例
+        this.backuper = new IncBackup();
         // 检查目录是否存在
-        utils.dirCheck(execDir);
+        utils.dirCheck(this.execDir);
     }
     /**
      * 服务器启动入口

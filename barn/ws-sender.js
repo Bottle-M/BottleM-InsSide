@@ -38,7 +38,7 @@ function goodbye() {
 /**
  * 通过主WebSocket发送数据，如果未发送成功会伺机重新发送
  * @param {Object} respObj 
- * @note Websocket.send不能连续调用！之前因为这里内存溢出，排查了半天！
+ * @note Websocket.send不能短时间内连续调用！之前因为这里内存溢出，排查了半天！
  * @note https://github.com/websockets/ws/issues/999#issuecomment-279233272
  */
 function send(respObj) {
@@ -54,7 +54,7 @@ function send(respObj) {
                 });
             }
             waitedFor += pollInterval;
-            // 等待了时间消息还没发出去，就抛弃
+            // 等待了一段时间消息还没发出去，就抛弃
             if (waitedFor >= discardTimeout) {
                 clearInterval(timer);
             }
