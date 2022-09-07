@@ -1,5 +1,7 @@
 // 储存WebSocket连接的模块
 'use strict';
+const discardTimeout = 60000; // 消息最多遗留多久，超过这个时间的消息会放弃发送，单位毫秒
+const pollInterval = 500; // 未发送消息的轮询间隔
 var mainConnection = null;
 var dataSending = false; // 是否正在发送数据
 
@@ -40,17 +42,23 @@ function goodbye() {
  * @note https://github.com/websockets/ws/issues/999#issuecomment-279233272
  */
 function send(respObj) {
-    let timer = setInterval(() => {
-        let ws = get();
-        // 在主连接存活且没有正在发送数据的情况下，发送数据
-        if (ws && !dataSending) {
-            dataSending = true;
-            clearInterval(timer);
-            ws.send(JSON.stringify(respObj), (err) => {
-                dataSending = false; // 数据发送完毕
-            });
-        }
-    }, 500);
+    let waitedFor = 0, // 已经等待了多久
+        timer = setInterval(() => {
+            let ws = get();
+            // 在主连接存活且没有正在发送数据的情况下，发送数据
+            if (ws && !dataSending) {
+                dataSending = true;
+                clearInterval(timer);
+                ws.send(JSON.stringify(respObj), (err) => {
+                    dataSending = false; // 数据发送完毕
+                });
+            }
+            waitedFor += pollInterval;
+            // 等待了时间消息还没发出去，就抛弃
+            if (waitedFor >= discardTimeout) {
+                clearInterval(timer);
+            }
+        }, pollInterval);
 }
 
 module.exports = {
