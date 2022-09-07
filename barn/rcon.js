@@ -50,6 +50,7 @@ function send(cmd) {
             sendingCommand = true; // 标记正在发送指令，防并发
             mainConnection.send(cmd);
             clearInterval(timer);
+            clearInterval(coolDownTimer);
             coolDownTimer = setTimeout(() => {
                 // 如果没有response，在coolDown时间后自动标记指令发送完成
                 sendingCommand = false;
