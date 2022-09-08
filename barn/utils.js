@@ -61,15 +61,21 @@ function execScripts(scripts, env, cwd, showInfo = true) {
 /**
  * （异步）清除目录中所有内容
  * @param {String} dirPath 目录路径
+ * @returns {Promise} resolve清除成功，reject清除失败
  */
 function clearDir(dirPath) {
-    fs.readdir(dirPath).then(files => {
+    return fs.readdir(dirPath).then(files => {
         return new Promise((resolve, reject) => {
-            for (let i = 0, len = files.length; i < len; i++) {
-                rmSync(path.join(dirPath, files[i]), {
-                    recursive: true // 支持深层目录
-                })
+            try {
+                for (let i = 0, len = files.length; i < len; i++) {
+                    rmSync(path.join(dirPath, files[i]), {
+                        recursive: true // 支持深层目录
+                    })
+                }
+            } catch (e) {
+                reject(e);
             }
+            resolve();
         });
     });
 }

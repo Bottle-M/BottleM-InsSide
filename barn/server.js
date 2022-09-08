@@ -1,6 +1,12 @@
 // 服务器部署/监控部分
 'use strict';
-const { writeFileSync, copyFileSync } = require('fs');
+const {
+    promises: fs,
+    writeFileSync,
+    copyFileSync,
+    rmSync,
+    statSync
+} = require('fs');
 const { ping } = require('minecraft-protocol');
 const path = require('path');
 const utils = require('./utils');
@@ -62,9 +68,17 @@ class IncBackup extends ServerBase {
         } = this.configs['incremental_backup'];
         let backupDestDir = path.join(dest_dir, './backup'), // 备份用目录
             restoreDestDir = path.join(dest_dir, './restore'); // 恢复用目录
+        // 环境变量新增BACKUP_DEST_DIR和RESTORE_DEST_DIR
+        this.execEnv['BACKUP_DEST_DIR'] = backupDestDir;
+        this.execEnv['RESTORE_DEST_DIR'] = restoreDestDir;
         this.enable = enable;
         this.destDir = dest_dir;
-        this.scripts = scripts;
+        // 备份记录文件
+        this.backupRecordFile = path.join(dest_dir, './backup-records.json');
+        // 将脚本路径转换为绝对路径
+        this.backupScripts = new Object();
+        for (let i in scripts)
+            this.backupScripts[i] = path.join(this.dataDir, scripts[i]);
         this.srcDirs = src_dirs;
         this.backupDestDir = backupDestDir;
         this.restoreDestDir = restoreDestDir;
@@ -91,8 +105,7 @@ class IncBackup extends ServerBase {
                     backupKey = utils.dirKey(dirPath), // 备份标识
                     // 备份标识名
                     backupDir = path.join(that.backupDestDir, backupKey),
-                    mTimeFile = path.join(that.backupDestDir, `${backupKey}.json`), // 记录修改日期的文件
-                    copyPathFile = path.join(that.backupDestDir, `${backupKey}-copied.json`); // 记录复制文件对应路径的文件
+                    mTimeFile = path.join(that.destDir, `${backupKey}.json`);// 记录修改日期的文件
                 // 检查备份目录是否存在，不存在则创建
                 utils.dirCheck(backupDir);
                 // 扫描目标目录，记录所有文件的mtime
@@ -110,7 +123,7 @@ class IncBackup extends ServerBase {
         });
     }
     /**
-     * （异步）执行一次增量备份
+     * （异步）执行单次增量备份
      * @returns {Promise}
      * @note 前提：已经初始化过
      */
@@ -118,6 +131,7 @@ class IncBackup extends ServerBase {
         // 未开启增量备份功能或者未初始化
         if (!this.enable || !this.initialized)
             return Promise.resolve();
+        let that = this;
         return new Promise((resolve, reject) => {
             // 遍历待备份的目录
             for (let i = 0, len = that.srcDirs.length; i < len; i++) {
@@ -125,8 +139,8 @@ class IncBackup extends ServerBase {
                     backupKey = utils.dirKey(srcDirPath), // 备份标识
                     // 备份标识名
                     backupDir = path.join(that.backupDestDir, backupKey),
-                    mTimeFile = path.join(that.backupDestDir, `${backupKey}.json`), // 记录修改日期的文件
-                    copyPathFile = path.join(that.backupDestDir, `${backupKey}-copied.json`); // 记录复制文件对应路径的文件
+                    mTimeFile = path.join(that.destDir, `${backupKey}.json`), // 记录修改日期的文件
+                    copyMapPath = path.join(backupDir, 'copyMap.json'); // 记录复制文件和源文件的路径对应关系
                 // 扫描目标目录，查看有哪些文件更新了
                 let prevObj = jsons.scRead(mTimeFile) || {}, // 读取上次备份时的mtime记录
                     diffObj = utils.scanDirMTime(srcDirPath, prevObj); // 扫描目标目录，查看有哪些文件更新了
@@ -136,15 +150,15 @@ class IncBackup extends ServerBase {
                     return;
                 }
                 try {
-                    let destDirCache = ''; // 目标目录缓存，免得多次dirCheck
+                    let destDirCache = '', // 目标目录缓存，免得多次dirCheck
+                        copyMap = []; // 记录复制文件和源文件的路径对应关系
                     // 复制更新的文件到备份目录
                     for (let key in diffObj) {
                         let filePath = diffObj[key][1],
+                            // 获得文件相对于srcDirPath的路径
+                            relativeFilePath = path.relative(srcDirPath, filePath),
                             // 复制到的目标路径
-                            destPath = path.join(backupDir,
-                                // 获得文件相对于srcDirPath的路径
-                                path.relative(srcDirPath, filePath)
-                            ),
+                            destPath = path.join(backupDir, relativeFilePath),
                             // 待复制文件的目标目录
                             destDir = path.dirname(destPath);
                         // 如果最近检查过目标目录，则不再检查
@@ -155,20 +169,153 @@ class IncBackup extends ServerBase {
                         }
                         // 复制文件
                         copyFileSync(filePath, destPath);
+                        // 记录复制文件和源文件的路径对应关系
+                        // [文件相对于srcDirPath的路径, 文件源绝对路径]
+                        copyMap.push([relativeFilePath, filePath]);
                         // 更新修改日期记录对象
                         prevObj[key] = diffObj[key];
                     }
                     // 将变更的修改日期写入修改日期记录文件
                     writeFileSync(mTimeFile, JSON.stringify(prevObj));
+                    // 写入copyMap
+                    writeFileSync(copyMapPath, JSON.stringify(copyMap));
                 } catch (e) {
                     reject(`Error occured while copying files: ${e}`);
                     return;
                 }
             }
+            // 写入新的增量备份信息
+            let records = jsons.scRead(that.backupRecordFile) || [],
+                backupName = `bk-${Date.now()}`; // 备份名
+            records.push({
+                name: backupName,
+                time: Date.now()
+            });
+            try {
+                writeFileSync(that.backupRecordFile, JSON.stringify(records));
+            } catch (e) {
+                reject(`Error occured while recording backup: ${e}`);
+                return;
+            }
+            // 回传给主控端
+            wsSender.send({
+                action: 'backup_sync',
+                records: records
+            })
             // 初始化完成
             that.initialized = true;
-            resolve();
-        });
+            resolve(backupName);
+        }).then(backupName => {
+            // 打包并上传本次增量备份
+            return utils.execScripts(that.backupScripts['backup'], Object.assign({
+                // 特别环境变量BACKUP_NAME，用于指定备份文件名
+                'BACKUP_NAME': backupName
+            }, that.execEnv), that.execDir);
+        }).then(stdouts => {
+            // 清除增量备份目录
+            return utils.clearDir(that.backupDestDir);
+        })
+    }
+    /**
+     * （异步）抛弃实例端和主控端的增量备份记录（这说明用不上这些备份了）
+     * @returns {Promise}
+     * @note 通常在实例端正常结束流程时调用
+     */
+    discardRecords() {
+        // 未开启增量备份功能或者未初始化
+        if (!this.enable || !this.initialized)
+            return Promise.resolve();
+        let that = this;
+        return new Promise((resolve, reject) => {
+            // 删除实例端的增量备份记录
+            try {
+                rmSync(that.backupRecordFile);
+            } catch (e) {
+                reject(`Error occured while removing backup records: ${e}`);
+                return;
+            }
+            // 通知主控端也删除增量备份记录
+            resolve(wsSender.send({
+                action: 'backup_sync',
+                records: null,
+                invoke: true // 抛弃增量备份记录
+            }));
+        })
+    }
+    /**
+     * （同步）根据目录中的copyMap来恢复备份，和restore结合使用
+     * @param {String} dirPath 待恢复的备份的目录
+     * @returns {Boolean} 是否恢复成功
+     */
+    restoreByMap(dirPath) {
+        // 找到copyMap文件
+        let copyMapFile = path.join(dirPath, 'copyMap.json'),
+            that = this;
+        try {
+            statSync(copyMapFile); // 检查copyMap是否存在
+            let copyMap = jsons.scRead(copyMapFile);
+            if (copyMap) {
+                // copyMap存在，开始恢复
+                let srcDirCache = null; // 源文件路径缓存
+                copyMap.forEach(item => {
+                    let [relativeFilePath, srcPath] = item, // [相对于备份/恢复目录的路径, 文件原本所在的绝对路径]
+                        absFilePath = path.join(that.restoreDestDir, relativeFilePath), // 目前文件在恢复目录中的绝对路径s
+                        srcDir = path.dirname(srcPath); // 文件原本所在的目录
+                    // 防止重复检查
+                    if (srcDirCache !== srcDir) {
+                        utils.dirCheck(srcDir); // 检查目录是否存在，不存在则创建
+                        srcDirCache = srcDir;
+                    }
+                    // 恢复文件
+                    copyFileSync(absFilePath, srcPath);
+                });
+            } else {
+                throw new Error(`${dirPath}->copyMap is empty`);
+            }
+        } catch (e) {
+            console.warn(`Error while restoring dir ${dirPath}: ${e}`);
+            return false
+        }
+    }
+    /**
+     * （异步）恢复单次增量备份
+     * @param {String} backupName 备份文件名（不含扩展名）
+     * @returns {Promise}
+     */
+    restore(backupName) {
+        let that = this;
+        return utils.execScripts(this.backupScripts['restore'], Object.assign({
+            // 特别环境变量BACKUP_NAME，用于指定备份文件名
+            'BACKUP_NAME': backupName
+        }, that.execEnv), this.execDir)
+            .then(res => {
+                // 读取解压出来的
+                return fs.readdir(that.restoreDestDir, {
+                    withFileTypes: true, // 返回dirent对象
+                    encoding: 'utf8'
+                });
+            }).then(files => {
+                return new Promise((resolve, reject) => {
+                    for (let i = 0, len = files.length; i < len; i++) {
+                        let dirent = files[i];
+                        if (dirent.isDirectory()) { // 如果是目录，就可以进行备份恢复了
+                            let currentDir = path.join(that.restoreDestDir, dirent.name);
+                            if (!that.restoreByMap(currentDir))
+                                return reject(`Failed to restore dir: ${currentDir}`);
+                            logger.record(1, `Successfully restored dir ${dirent.name}`);
+                        }
+                    }
+                    resolve();
+                });
+            });
+    }
+    /**
+     * 恢复增量备份记录中的所有备份
+     * @returns {Promise}
+     * @note 恢复顺序是时间戳升序
+     */
+    restoreAll() {
+
     }
 }
 
@@ -247,7 +394,10 @@ class Server extends ServerBase {
                         }
                         // 将扫描出来的压缩包大小写入状态文件
                         status.setVal('previous_packed_size', dirSize);
-                        utils.clearDir(packedServerDir); // 清空目录
+                        utils.clearDir(packedServerDir) // 清空目录
+                            .catch(err => {
+                                logger.record(2, `Failed to clear packed server directory: ${err}`);
+                            });
                     }
                     resolve();
                 });
@@ -524,6 +674,8 @@ class Server extends ServerBase {
                     status.update(2402); // 更新状态：服务器正准备关闭-上传中
                     // 压缩包没有问题，开始上传
                     return utils.execScripts(that.endingScripts['upload'], that.execEnv, that.execDir);
+                }).then(res => {
+                    return that.backuper.discardRecords(); // 清理增量备份记录
                 });
         }
     }

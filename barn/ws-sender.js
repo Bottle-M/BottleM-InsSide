@@ -38,27 +38,36 @@ function goodbye() {
 /**
  * 通过主WebSocket发送数据，如果未发送成功会伺机重新发送
  * @param {Object} respObj 
+ * @returns {Promise} 发送成功resolve，不会reject
  * @note Websocket.send不能短时间内连续调用！之前因为这里内存溢出，排查了半天！
  * @note https://github.com/websockets/ws/issues/999#issuecomment-279233272
  */
 function send(respObj) {
-    let waitedFor = 0, // 已经等待了多久
-        timer = setInterval(() => {
-            let ws = get();
-            // 在主连接存活且没有正在发送数据的情况下，发送数据
-            if (ws && !dataSending) {
-                dataSending = true;
-                clearInterval(timer);
-                ws.send(JSON.stringify(respObj), (err) => {
-                    dataSending = false; // 数据发送完毕
-                });
-            }
-            waitedFor += pollInterval;
-            // 等待了一段时间消息还没发出去，就抛弃
-            if (waitedFor >= discardTimeout) {
-                clearInterval(timer);
-            }
-        }, pollInterval);
+    return new Promise((resolve, reject) => {
+        let waitedFor = 0, // 已经等待了多久
+            timer = setInterval(() => {
+                let ws = get();
+                // 在主连接存活且没有正在发送数据的情况下，发送数据
+                if (ws && !dataSending) {
+                    dataSending = true;
+                    clearInterval(timer);
+                    ws.send(JSON.stringify(respObj), (err) => {
+                        dataSending = false; // 数据发送完毕
+                        if (err) {
+                            console.error(`Error while sending data through WebSocket: ${err}`);
+                            return;
+                        }
+                        resolve();
+                    });
+                }
+                waitedFor += pollInterval;
+                // 等待了一段时间消息还没发出去，就抛弃
+                if (waitedFor >= discardTimeout) {
+                    clearInterval(timer);
+                    console.error(`Error while sending data through WebSocket: ${err}`); // 消息发送失败
+                }
+            }, pollInterval);
+    });
 }
 
 module.exports = {
