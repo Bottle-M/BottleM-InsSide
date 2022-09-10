@@ -26,13 +26,19 @@ class ServerBase {
         let allConfigs = configs.getConfigs(),
             {
                 remote_dir: dataDir,
+                deploy_scripts: deployScripts,
+                launch_script: launchScript,
                 server_scripts: serverScripts,
                 server_ending_scripts: endingScripts,
                 script_exec_dir: execDir,
                 rcon: rconConfigs,
+                under_maintenance: underMaintenance, // 维护模式
+                restore_before_deploy: restoreBeforeDeploy, // 部署前恢复增量备份
                 env
             } = allConfigs;
         this.configs = allConfigs;
+        this.underMaintenance = underMaintenance;
+        this.restoreBeforeDeploy = restoreBeforeDeploy;
         this.rconConfigs = rconConfigs;
         // 脚本存放的目录
         this.dataDir = dataDir;
@@ -41,7 +47,9 @@ class ServerBase {
         // 脚本执行所在目录
         this.execDir = execDir;
         // 处理部署脚本路径为绝对路径
-        this.deployScripts = allConfigs['deploy_scripts'].map(script => path.join(dataDir, script));
+        this.deployScripts = deployScripts.map(script => path.join(dataDir, script));
+        // 处理Minecraft服务器启动脚本路径为绝对路径
+        this.launchScript = path.join(dataDir, launchScript);
         // 处理Minecraft服务器相关脚本为绝对路径
         this.serverScripts = new Object();
         for (let i in serverScripts)
@@ -314,7 +322,7 @@ class IncBackup extends ServerBase {
      * @returns {Promise}
      * @note 恢复顺序是时间戳升序
      */
-    restoreAll() {
+    restoreAll(records) {
 
     }
 }
@@ -322,11 +330,10 @@ class IncBackup extends ServerBase {
 class Server extends ServerBase {
     /**
      * 构造Server实例
-     * @param {Boolean} maintain 是否是维护模式
      */
-    constructor(maintain = false) {
+    constructor() {
         super();
-        this.maintain = maintain;
+        this.maintain = this.underMaintenance;
         // 创建增量备份的实例
         this.backuper = new IncBackup();
         // 检查目录是否存在
@@ -401,6 +408,12 @@ class Server extends ServerBase {
                     }
                     resolve();
                 });
+            }).then(res => {
+                // 这个时候文件全部解压了，初始化增量备份
+                return that.backuper.init();
+            }).then(res => {
+                // 启动Minecraft服务器
+                return utils.execScripts(that.launchScript, that.execEnv, that.execDir);
             }).then(res => {
                 utils.showMemUsage();
                 return Promise.resolve(false);
