@@ -310,6 +310,7 @@ class IncBackup extends ServerBase {
             return false
         }
         console.log(`[Restore]Successfully copied dir: ${dirPath}`);
+        return true;
     }
     /**
      * （异步）恢复单次增量备份
