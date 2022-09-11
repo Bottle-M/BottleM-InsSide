@@ -776,6 +776,7 @@ class Server extends ServerBase {
         } else {
             // 紧急情况下，进行增量备份并上传
             logger.record(1, `Urgently uploading the server...`);
+            return that.backuper.make();
         }
     }
 

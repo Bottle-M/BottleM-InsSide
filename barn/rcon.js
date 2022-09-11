@@ -3,7 +3,7 @@
 const rconClient = require('rcon');
 const { EventEmitter } = require('ws');
 const logger = require('./logger');
-const coolDown = 1000; // RCON信息发送的最长冷却时间(ms)
+const coolDown = 10000; // RCON信息发送的最长冷却时间(ms)
 const rconEvents = new EventEmitter();
 var mainConnection = null; // rcon主连接
 var sendingCommand = false; // 是否正在发送指令
@@ -23,7 +23,6 @@ function make(port, password) {
             mainConnection = conn; // 记录连接实例
         }).on('response', (data) => {
             sendingCommand = false; // 有回应，标记指令发送完成
-            clearTimeout(coolDownTimer); // 清除冷却计时器，因为已经有回应了
             rconEvents.emit('dispatched'); // 发送指令已经被处理
             logger.record(1, `RCON response: ${data}`);
         }).on('error', (err) => {
