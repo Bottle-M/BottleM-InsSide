@@ -292,7 +292,7 @@ class IncBackup extends ServerBase {
                 let srcDirCache = null; // 源文件路径缓存
                 copyMap.forEach(item => {
                     let [relativeFilePath, srcPath] = item, // [相对于备份/恢复目录的路径, 文件原本所在的绝对路径]
-                        absFilePath = path.join(that.restoreDestDir, relativeFilePath), // 目前文件在恢复目录中的绝对路径s
+                        absFilePath = path.join(dirPath, relativeFilePath), // 目前文件在恢复目录中的绝对路径s
                         srcDir = path.dirname(srcPath); // 文件原本所在的目录
                     // 防止重复检查
                     if (srcDirCache !== srcDir) {
