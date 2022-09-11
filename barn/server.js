@@ -229,7 +229,7 @@ class IncBackup extends ServerBase {
                 'BACKUP_NAME': backupName
             }, that.execEnv), that.execDir);
         }).then(stdouts => {
-            // 清除增量备份目录
+            // 单次备份结束，清除增量备份目录
             return utils.clearDir(that.backupDestDir);
         })
     }
@@ -427,28 +427,24 @@ class Server extends ServerBase {
         // 检查目录是否存在
         utils.dirCheck(packedServerDir);
         utils.dirCheck(mc_server_dir);
-        return new Promise((resolve) => {
-            // 部署前检查是否需要先恢复增量备份
+        // 执行脚本
+        return utils.execScripts(this.deployScripts, this.execEnv, this.execDir).then(res => {
+            // 检查是否需要先恢复增量备份
             // 先保证previouBackupRecs不为null
             if (that.previouBackupRecs) {
                 if (that.restoreBeforeDeploy === 'discard') {
                     // 如果是丢弃增量备份
                     logger.record(1, 'Discarding previous incremental backups');
-                    resolve(that.backuper.discardRecords());
+                    return that.backuper.discardRecords();
                 } else if (that.restoreBeforeDeploy) {
                     logger.record(1, 'Restoring previous incremental backups');
                     // 恢复增量备份
-                    resolve(
-                        that.backuper.restoreAll(that.previouBackupRecs)
-                            // 恢复后删除增量备份记录
-                            .then(res => that.backuper.discardRecords())
-                    );
+                    return that.backuper.restoreAll(that.previouBackupRecs)
+                        // 恢复后删除增量备份记录
+                        .then(res => that.backuper.discardRecords())
                 }
             }
-            resolve(); // 跳过
-        }).then(res => {
-            // 执行脚本
-            return utils.execScripts(this.deployScripts, this.execEnv, this.execDir);
+            return Promise.resolve(); // 跳过
         }).then(res => {
             // 压缩包大小记录部分
             return new Promise((resolve, reject) => {
