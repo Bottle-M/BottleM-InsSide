@@ -431,8 +431,10 @@ class Server extends ServerBase {
             if (that.previouBackupRecs) {
                 if (that.restoreBeforeDeploy === 'discard') {
                     // 如果是丢弃增量备份
+                    logger.record(1, 'Discarding previous incremental backups');
                     resolve(that.backuper.discardRecords());
                 } else if (that.restoreBeforeDeploy) {
+                    logger.record(1, 'Restoring previous incremental backups');
                     // 恢复增量备份
                     resolve(
                         that.backuper.restoreAll(that.previouBackupRecs)
