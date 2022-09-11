@@ -243,6 +243,7 @@ class IncBackup extends ServerBase {
         // 未开启增量备份功能
         if (!this.enable)
             return Promise.resolve();
+        logger.record(1, 'Discarding unneeded incremental backups...');
         let that = this;
         return new Promise((resolve, reject) => {
             // 删除实例端的增量备份记录
