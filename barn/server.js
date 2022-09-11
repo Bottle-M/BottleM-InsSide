@@ -320,7 +320,7 @@ class IncBackup extends ServerBase {
         let that = this;
         if (!this.enable)
             return Promise.resolve();
-        console.log(`[Restore]Restoring backup: ${backupName}`);
+        logger.record(1, `[Restore]Restoring backup: ${backupName}`);
         return utils.execScripts(this.backupScripts['restore'], Object.assign({
             // 特别环境变量BACKUP_NAME，用于指定备份文件名
             'BACKUP_NAME': backupName
@@ -342,8 +342,9 @@ class IncBackup extends ServerBase {
                             logger.record(1, `Successfully restored dir ${dirent.name}`);
                         }
                     }
-                    console.log(`[Restore]Successfully restored backup: ${backupName}`);
-                    resolve();
+                    logger.record(1, `[Restore]Successfully restored backup: ${backupName}`);
+                    // 删除解压出来的备份文件，善始善终
+                    resolve(utils.clearDir(that.restoreDestDir));
                 });
             });
     }
