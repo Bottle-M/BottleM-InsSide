@@ -37,12 +37,13 @@ function goodbye() {
 
 /**
  * 通过主WebSocket发送数据，如果未发送成功会伺机重新发送
- * @param {Object} respObj 
+ * @param {Object} respObj 待发送数据对象
+ * @param {Boolean} urgent 是否重要(重要的数据必须发送，会一直轮询)
  * @returns {Promise} 发送成功resolve，不会reject
  * @note Websocket.send不能短时间内连续调用！之前因为这里内存溢出，排查了半天！
  * @note https://github.com/websockets/ws/issues/999#issuecomment-279233272
  */
-function send(respObj) {
+function send(respObj, urgent = false) {
     return new Promise((resolve, reject) => {
         let waitedFor = 0, // 已经等待了多久
             timer = setInterval(() => {
@@ -61,8 +62,8 @@ function send(respObj) {
                     });
                 }
                 waitedFor += pollInterval;
-                // 等待了一段时间消息还没发出去，就抛弃
-                if (waitedFor >= discardTimeout) {
+                // 非紧急消息，等待了一段时间消息还没发出去，就抛弃
+                if (!urgent && waitedFor >= discardTimeout) {
                     clearInterval(timer);
                     console.error(`Error while sending data through WebSocket: ${err}`); // 消息发送失败
                 }

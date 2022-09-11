@@ -84,8 +84,6 @@ class IncBackup extends ServerBase {
         this.execEnv['RESTORE_DEST_DIR'] = restoreDestDir;
         this.enable = enable;
         this.destDir = dest_dir;
-        // 备份记录文件
-        this.backupRecordFile = path.join(dest_dir, './backup-records.json');
         // 将脚本路径转换为绝对路径
         this.backupScripts = new Object();
         for (let i in scripts)
@@ -202,23 +200,13 @@ class IncBackup extends ServerBase {
                 console.log(`[Backup]Successfully made backup for: ${srcDirPath}`);
             }
             // 写入新的增量备份信息
-            let records = jsons.scRead(that.backupRecordFile) || [],
-                backupName = `bk-${Date.now()}`; // 备份名
-            records.push({
-                name: backupName,
-                time: Date.now()
-            });
-            try {
-                writeFileSync(that.backupRecordFile, JSON.stringify(records));
-            } catch (e) {
-                reject(`Error occured while recording backup: ${e}`);
-                return;
-            }
+            let backupName = `bk-${Date.now()}`; // 备份名
             // 回传给主控端
             wsSender.send({
                 action: 'backup_sync',
-                records: records
-            })
+                name: backupName,
+                time: Date.now()
+            }, true); // urgent=true，必须要发到主控端
             // 初始化完成
             that.initialized = true;
             resolve(backupName);
@@ -247,16 +235,12 @@ class IncBackup extends ServerBase {
         let that = this;
         return new Promise((resolve, reject) => {
             // 删除实例端的增量备份记录
-            // 移除备份文件名记录文件
-            rmSync(that.backupRecordFile, {
-                force: true // 路径文件不存在也不报错
-            });
             // 通知主控端也删除增量备份记录
-            resolve(wsSender.send({
-                action: 'backup_sync',
-                records: null,
-                invoke: true // 抛弃增量备份记录
-            }));
+            resolve(
+                wsSender.send({
+                    action: 'revoke_backup' // 抛弃增量备份记录
+                }, true) // urgent=true,必须要发到主控端
+            );
         }).then(res => {
             // 通过脚本移除云储存中的增量备份
             let backupNameList = ''; // 备份文件名列表（不包括文件后缀名）
