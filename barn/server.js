@@ -240,21 +240,17 @@ class IncBackup extends ServerBase {
      * @note Minecraft服务器运行时的增量备份是不允许丢弃的
      */
     discardRecords() {
-        // 未开启增量备份功能
-        if (!this.enable)
+        // 未开启增量备份功能或者未初始化
+        if (!this.enable || !this.initialized)
             return Promise.resolve();
         logger.record(1, 'Discarding unneeded incremental backups...');
         let that = this;
         return new Promise((resolve, reject) => {
             // 删除实例端的增量备份记录
-            try {
-                // 移除备份文件名记录文件
-                if (statSync(that.backupRecordFile))
-                    rmSync(that.backupRecordFile);
-            } catch (e) {
-                reject(`Error occured while removing backup records: ${e}`);
-                return;
-            }
+            // 移除备份文件名记录文件
+            rmSync(that.backupRecordFile, {
+                force: true // 路径文件不存在也不报错
+            });
             // 通知主控端也删除增量备份记录
             resolve(wsSender.send({
                 action: 'backup_sync',
@@ -319,7 +315,8 @@ class IncBackup extends ServerBase {
      */
     restore(backupName) {
         let that = this;
-        if (!this.enable)
+        // 未开启增量备份功能或者未初始化
+        if (!this.enable || !this.initialized)
             return Promise.resolve();
         logger.record(1, `[Restore]Restoring backup: ${backupName}`);
         return utils.execScripts(this.backupScripts['restore'], Object.assign({
@@ -430,6 +427,9 @@ class Server extends ServerBase {
         utils.dirCheck(mc_server_dir);
         // 执行脚本
         return utils.execScripts(this.deployScripts, this.execEnv, this.execDir).then(res => {
+            // 这个时候文件全部解压了，初始化增量备份
+            return that.backuper.init();
+        }).then(res => {
             // 检查是否需要先恢复增量备份
             // 先保证previouBackupRecs不为null
             if (that.previouBackupRecs) {
@@ -469,9 +469,6 @@ class Server extends ServerBase {
                 }
                 resolve();
             });
-        }).then(res => {
-            // 这个时候文件全部解压了，初始化增量备份
-            return that.backuper.init();
         }).then(res => {
             // 启动Minecraft服务器
             return utils.execScripts(that.launchScript, that.execEnv, that.execDir);
