@@ -1,9 +1,10 @@
 // rcon连接部分
 'use strict';
 const rconClient = require('rcon');
+const { EventEmitter } = require('ws');
 const logger = require('./logger');
 const coolDown = 1000; // RCON信息发送的最长冷却时间(ms)
-var coolDownTimer;
+const rconEvents = new EventEmitter();
 var mainConnection = null; // rcon主连接
 var sendingCommand = false; // 是否正在发送指令
 
@@ -23,6 +24,7 @@ function make(port, password) {
         }).on('response', (data) => {
             sendingCommand = false; // 有回应，标记指令发送完成
             clearTimeout(coolDownTimer); // 清除冷却计时器，因为已经有回应了
+            rconEvents.emit('dispatched'); // 发送指令已经被处理
             logger.record(1, `RCON response: ${data}`);
         }).on('error', (err) => {
             logger.record(2, `RCON Connection Error:${err}`);
@@ -43,20 +45,27 @@ function make(port, password) {
 /**
  * 通过RCON向Minecraft服务器控制台发送命令
  * @param {String} cmd 命令内容
+ * @returns {Promise} 如果发送成功会resolve
  */
 function send(cmd) {
-    let timer = setInterval(() => {
-        if (mainConnection && !sendingCommand) {
-            sendingCommand = true; // 标记正在发送指令，防并发
-            mainConnection.send(cmd);
-            clearInterval(timer);
-            clearInterval(coolDownTimer);
-            coolDownTimer = setTimeout(() => {
-                // 如果没有response，在coolDown时间后自动标记指令发送完成
-                sendingCommand = false;
-            }, coolDown);
-        }
-    }, 200);
+    return new Promise((resolve) => {
+        let timer = setInterval(() => {
+            if (mainConnection && !sendingCommand) {
+                sendingCommand = true; // 标记正在发送指令，防并发
+                mainConnection.send(cmd);
+                clearInterval(timer);
+                let coolDownTimer = setTimeout(() => {
+                    // 如果没有response，在coolDown时间后自动标记指令发送完成
+                    sendingCommand = false;
+                    resolve();
+                }, coolDown);
+                rconEvents.once('dispatched', () => {
+                    clearInterval(coolDownTimer);
+                    resolve();
+                });
+            }
+        }, 200);
+    });
 }
 
 module.exports = {

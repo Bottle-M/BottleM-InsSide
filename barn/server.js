@@ -34,9 +34,12 @@ class ServerBase {
                 rcon: rconConfigs,
                 under_maintenance: underMaintenance, // 维护模式
                 restore_before_deploy: restoreBeforeDeploy, // 部署前恢复增量备份
+                backup_records,
                 env
             } = allConfigs;
         this.configs = allConfigs;
+        // 取到之前的备份记录，如果没有就是null
+        this.previouBackupRecs = backup_records;
         this.underMaintenance = underMaintenance;
         this.restoreBeforeDeploy = restoreBeforeDeploy;
         this.rconConfigs = rconConfigs;
@@ -102,6 +105,7 @@ class IncBackup extends ServerBase {
      * @returns {Promise}
      */
     init() {
+        console.log('Initializing incremental backup...');
         let that = this;
         // 未开启增量备份功能或者已经初始化过了
         if (!this.enable || this.initialized)
@@ -127,6 +131,7 @@ class IncBackup extends ServerBase {
             }
             // 初始化完成
             that.initialized = true;
+            console.log('Incremental backup initialized.');
             resolve();
         });
     }
@@ -139,6 +144,7 @@ class IncBackup extends ServerBase {
         // 未开启增量备份功能或者未初始化
         if (!this.enable || !this.initialized)
             return Promise.resolve();
+        console.log('Making incremental backup...');
         let that = this;
         return new Promise((resolve, reject) => {
             // 遍历待备份的目录
@@ -149,6 +155,7 @@ class IncBackup extends ServerBase {
                     backupDir = path.join(that.backupDestDir, backupKey),
                     mTimeFile = path.join(that.destDir, `${backupKey}.json`), // 记录修改日期的文件
                     copyMapPath = path.join(backupDir, 'copyMap.json'); // 记录复制文件和源文件的路径对应关系
+                console.log(`[Backup]Scanning directory: ${srcDirPath}`);
                 // 扫描目标目录，查看有哪些文件更新了
                 let prevObj = jsons.scRead(mTimeFile) || {}, // 读取上次备份时的mtime记录
                     diffObj = utils.scanDirMTime(srcDirPath, prevObj); // 扫描目标目录，查看有哪些文件更新了
@@ -161,6 +168,7 @@ class IncBackup extends ServerBase {
                     let destDirCache = '', // 目标目录缓存，免得多次dirCheck
                         copyMap = []; // 记录复制文件和源文件的路径对应关系
                     // 复制更新的文件到备份目录
+                    console.log(`[Backup]Copying files...`);
                     for (let key in diffObj) {
                         let filePath = diffObj[key][1],
                             // 获得文件相对于srcDirPath的路径
@@ -191,6 +199,7 @@ class IncBackup extends ServerBase {
                     reject(`Error occured while copying files: ${e}`);
                     return;
                 }
+                console.log(`[Backup]Successfully made backup for: ${srcDirPath}`);
             }
             // 写入新的增量备份信息
             let records = jsons.scRead(that.backupRecordFile) || [],
@@ -227,17 +236,20 @@ class IncBackup extends ServerBase {
     /**
      * （异步）抛弃实例端和主控端的增量备份记录（这说明用不上这些备份了）
      * @returns {Promise}
-     * @note 通常在实例端正常结束流程时调用
+     * @note 仅在实例端启动时/正常结束流程时调用
+     * @note Minecraft服务器运行时的增量备份是不允许丢弃的
      */
     discardRecords() {
-        // 未开启增量备份功能或者未初始化
-        if (!this.enable || !this.initialized)
+        // 未开启增量备份功能
+        if (!this.enable)
             return Promise.resolve();
         let that = this;
         return new Promise((resolve, reject) => {
             // 删除实例端的增量备份记录
             try {
-                rmSync(that.backupRecordFile);
+                // 移除备份文件名记录文件
+                if (statSync(that.backupRecordFile))
+                    rmSync(that.backupRecordFile);
             } catch (e) {
                 reject(`Error occured while removing backup records: ${e}`);
                 return;
@@ -248,7 +260,18 @@ class IncBackup extends ServerBase {
                 records: null,
                 invoke: true // 抛弃增量备份记录
             }));
-        })
+        }).then(res => {
+            // 通过脚本移除云储存中的增量备份
+            let backupNameList = ''; // 备份文件名列表（不包括文件后缀名）
+            if (that.previouBackupRecs) {
+                // 拼接成Bash脚本能识别的列表
+                backupNameList = that.previouBackupRecs.map(rec => rec.name).join(' ');
+            }
+            return utils.execScripts(that.backupScripts['discard'], Object.assign({
+                // 特别环境变量BACKUP_NAME_LIST，用于指定备份文件名列表
+                'BACKUP_NAME_LIST': backupNameList
+            }, that.execEnv), that.execDir);
+        });
     }
     /**
      * （同步）根据目录中的copyMap来恢复备份，和restore结合使用
@@ -256,6 +279,7 @@ class IncBackup extends ServerBase {
      * @returns {Boolean} 是否恢复成功
      */
     restoreByMap(dirPath) {
+        console.log(`[Restore]Copying Dir: ${dirPath}`);
         // 找到copyMap文件
         let copyMapFile = path.join(dirPath, 'copyMap.json'),
             that = this;
@@ -284,6 +308,7 @@ class IncBackup extends ServerBase {
             console.warn(`Error while restoring dir ${dirPath}: ${e}`);
             return false
         }
+        console.log(`[Restore]Successfully copied dir: ${dirPath}`);
     }
     /**
      * （异步）恢复单次增量备份
@@ -292,6 +317,9 @@ class IncBackup extends ServerBase {
      */
     restore(backupName) {
         let that = this;
+        if (!this.enable)
+            return Promise.resolve();
+        console.log(`[Restore]Restoring backup: ${backupName}`);
         return utils.execScripts(this.backupScripts['restore'], Object.assign({
             // 特别环境变量BACKUP_NAME，用于指定备份文件名
             'BACKUP_NAME': backupName
@@ -313,6 +341,7 @@ class IncBackup extends ServerBase {
                             logger.record(1, `Successfully restored dir ${dirent.name}`);
                         }
                     }
+                    console.log(`[Restore]Successfully restored backup: ${backupName}`);
                     resolve();
                 });
             });
@@ -323,7 +352,17 @@ class IncBackup extends ServerBase {
      * @note 恢复顺序是时间戳升序
      */
     restoreAll(records) {
-
+        // 将备份按时间戳升序排序
+        records.sort((a, b) => a.time - b.time);
+        let that = this,
+            tasker = (doing = 0) => {
+                if (doing >= records.length)
+                    return Promise.resolve();
+                else
+                    return that.restore(records[doing].name)
+                        .then(res => tasker(doing + 1));
+            };
+        return tasker();
     }
 }
 
@@ -333,6 +372,9 @@ class Server extends ServerBase {
      */
     constructor() {
         super();
+        // 是否开启增量备份
+        let { enable: backupEnabled } = this.configs['incremental_backup'];
+        this.backupEnabled = backupEnabled;
         this.maintain = this.underMaintenance;
         // 创建增量备份的实例
         this.backuper = new IncBackup();
@@ -383,41 +425,59 @@ class Server extends ServerBase {
         // 检查目录是否存在
         utils.dirCheck(packedServerDir);
         utils.dirCheck(mc_server_dir);
-        // 执行脚本
-        return utils.execScripts(this.deployScripts, this.execEnv, this.execDir)
-            .then(res => {
-                // 压缩包大小记录部分
-                return new Promise((resolve, reject) => {
-                    // check_packed_server_size>0，说明要检查
-                    // 另外，如果是维护模式，则不检查压缩包大小
-                    if (!that.maintain && checkPackedSize > 0) {
-                        // 计算服务器启动目录
-                        let dirSize = utils.calcDirSize(packedServerDir);
-                        // 如果扫描出来发现是空目录
-                        if (dirSize === 0) {
-                            // 错误：扫描不到压缩包
-                            reject('Packed server directory is empty!');
-                            return;
-                        }
-                        // 将扫描出来的压缩包大小写入状态文件
-                        status.setVal('previous_packed_size', dirSize);
-                        utils.clearDir(packedServerDir) // 清空目录
-                            .catch(err => {
-                                logger.record(2, `Failed to clear packed server directory: ${err}`);
-                            });
+        return new Promise((resolve) => {
+            // 部署前检查是否需要先恢复增量备份
+            // 先保证previouBackupRecs不为null
+            if (that.previouBackupRecs) {
+                if (that.restoreBeforeDeploy === 'discard') {
+                    // 如果是丢弃增量备份
+                    resolve(that.backuper.discardRecords());
+                } else if (that.restoreBeforeDeploy) {
+                    // 恢复增量备份
+                    resolve(
+                        that.backuper.restoreAll(that.previouBackupRecs)
+                            // 恢复后删除增量备份记录
+                            .then(res => that.backuper.discardRecords())
+                    );
+                }
+            }
+            resolve(); // 跳过
+        }).then(res => {
+            // 执行脚本
+            return utils.execScripts(this.deployScripts, this.execEnv, this.execDir);
+        }).then(res => {
+            // 压缩包大小记录部分
+            return new Promise((resolve, reject) => {
+                // check_packed_server_size>0，说明要检查
+                // 另外，如果是维护模式，则不检查压缩包大小
+                if (!that.maintain && checkPackedSize > 0) {
+                    // 计算服务器启动目录
+                    let dirSize = utils.calcDirSize(packedServerDir);
+                    // 如果扫描出来发现是空目录
+                    if (dirSize === 0) {
+                        // 错误：扫描不到压缩包
+                        reject('Packed server directory is empty!');
+                        return;
                     }
-                    resolve();
-                });
-            }).then(res => {
-                // 这个时候文件全部解压了，初始化增量备份
-                return that.backuper.init();
-            }).then(res => {
-                // 启动Minecraft服务器
-                return utils.execScripts(that.launchScript, that.execEnv, that.execDir);
-            }).then(res => {
-                utils.showMemUsage();
-                return Promise.resolve(false);
+                    // 将扫描出来的压缩包大小写入状态文件
+                    status.setVal('previous_packed_size', dirSize);
+                    utils.clearDir(packedServerDir) // 清空目录
+                        .catch(err => {
+                            logger.record(2, `Failed to clear packed server directory: ${err}`);
+                        });
+                }
+                resolve();
             });
+        }).then(res => {
+            // 这个时候文件全部解压了，初始化增量备份
+            return that.backuper.init();
+        }).then(res => {
+            // 启动Minecraft服务器
+            return utils.execScripts(that.launchScript, that.execEnv, that.execDir);
+        }).then(res => {
+            utils.showMemUsage();
+            return Promise.resolve(false);
+        });
     }
     /**
      * 等待服务器启动
@@ -488,12 +548,14 @@ class Server extends ServerBase {
         let {
             server_idling_timeout: maxIdlingTime, // 服务器最长空闲时间
             player_login_reset_timeout: resetTimeAfterLogin // 玩家离开后重置时间
-        } = this.configs,
+        } = this.configs;
+        let {
+            interval: backupInterval // 多长时间进行一次增量备份
+        } = this.configs['incremental_backup'],
             that = this;
-        let idlingTime = 0; // 服务器空闲时间(ms)
-        let counter, playerMonitor, processMonitor, terminationMonitor, idlingTimeSync;
-
-        // 增量备份
+        let idlingTime = 0, // 服务器空闲时间(ms)
+            timeToBackup = 0; // 增量备份相关计时器(ms)
+        let counter, playerMonitor, processMonitor, terminationMonitor, idlingTimeSync, backupTimer;
 
         return new Promise((resolve, reject) => {
             if (!that.maintain) { // 维护模式下不监视服务器
@@ -584,6 +646,24 @@ class Server extends ServerBase {
                     });
                 }, 6000);
             }
+            // 如果开启了增量备份
+            if (that.backupEnabled) {
+                // 每一秒倒计时一次
+                backupTimer = setInterval(() => {
+                    timeToBackup += 1000;
+                    if (timeToBackup >= backupInterval) {
+                        timeToBackup = 0;
+                        // 开始一次增量备份
+                        rcon.send('save-all') // 先保存服务器数据
+                            .then(res => that.backuper.make())
+                            .then(res => {
+                                logger.record(1, 'Successfully made an incremental backup.');
+                            }).catch(err => {
+                                logger.record(2, `Failed to make an incremental backup:${err}`);
+                            })
+                    }
+                }, 1000);
+            }
             // 接受用户关闭服务器请求
             utils.serverEvents.once('stop', () => {
                 resolve({
@@ -607,9 +687,9 @@ class Server extends ServerBase {
             clearInterval(terminationMonitor);
             clearInterval(playerMonitor);
             clearInterval(idlingTimeSync);
+            clearInterval(backupTimer);
             return Promise.resolve(result); // result:{reason,stop,urgent}
         })
-
     }
 
     /**
@@ -621,7 +701,7 @@ class Server extends ServerBase {
         let { stop } = options, // 是否需要执行关服脚本
             that = this;
         if (!stop) {
-            // 如果stop=false，往往代表服务器已经关闭，无需再执行关服脚本
+            // 如果stop=false，往往代表服务器已经关闭（或者被Kill），无需再执行关服脚本
             return Promise.resolve(options);
         }
         let timer;
@@ -663,9 +743,11 @@ class Server extends ServerBase {
             that = this;
         status.update(2401); // 更新状态：服务器正准备关闭-打包中
         logger.record(1, `Server closing: ${reason}`); // 报告给主控端
-        if (!urgent) {
+        // 如果没有开启备份，无法进入紧急模式
+        if (!urgent || !this.backupEnabled) {
             // 普通情况下的关服
             // 执行压缩打包脚本
+            logger.record(1, `Normally packing up the server...`);
             return utils.execScripts(this.endingScripts['pack'], this.execEnv, this.execDir)
                 .then(stdouts => {
                     return new Promise((resolve, reject) => {
@@ -688,8 +770,12 @@ class Server extends ServerBase {
                     // 压缩包没有问题，开始上传
                     return utils.execScripts(that.endingScripts['upload'], that.execEnv, that.execDir);
                 }).then(res => {
-                    return that.backuper.discardRecords(); // 清理增量备份记录
+                    // 清理增量备份记录，因为此时整个服务器端全部上传到了云储存，增量备份没用了
+                    return that.backuper.discardRecords();
                 });
+        } else {
+            // 紧急情况下，进行增量备份并上传
+            logger.record(1, `Urgently uploading the server...`);
         }
     }
 
