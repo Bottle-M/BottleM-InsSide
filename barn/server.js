@@ -39,8 +39,6 @@ class ServerBase {
         this.configs = allConfigs;
         // 取到之前的备份记录，如果没有就是null
         this.previouBackupRecs = backup_records;
-        // 记录增量备份文件的文件的路径
-        this.backupRecordsFilePath = path.join(dest_dir, './backup-records.json');
         this.underMaintenance = underMaintenance;
         this.restoreBeforeLaunch = restoreBeforeLaunch;
         this.rconConfigs = rconConfigs;
@@ -80,6 +78,8 @@ class IncBackup extends ServerBase {
         } = this.configs['incremental_backup'];
         let backupDestDir = path.join(dest_dir, './backup'), // 备份用目录
             restoreDestDir = path.join(dest_dir, './restore'); // 恢复用目录
+        // 记录增量备份文件的文件的路径
+        this.backupRecordsFilePath = path.join(dest_dir, './backup-records.json');
         // 环境变量新增BACKUP_DEST_DIR和RESTORE_DEST_DIR
         this.execEnv['BACKUP_DEST_DIR'] = backupDestDir;
         this.execEnv['RESTORE_DEST_DIR'] = restoreDestDir;
@@ -206,13 +206,11 @@ class IncBackup extends ServerBase {
                     action: 'backup_sync',
                     name: backupName,
                     time: Date.now()
-                },
-                backupRecords = jsons.scRead(that.backupRecordsFilePath) || [];
+                };
             // 回传给主控端
             wsSender.send(backupObj, true); // urgent=true，必须要发到主控端
-            // 记录备份信息
-            backupRecords.push(backupObj);
-            writeFileSync(that.backupRecordsFilePath, JSON.stringify(backupRecords));
+            // 在本地记录备份信息
+            that.recordBackup(backupObj);
             // 初始化完成
             that.initialized = true;
             resolve(backupName);
@@ -226,6 +224,28 @@ class IncBackup extends ServerBase {
             // 单次备份结束，清除增量备份目录
             return utils.clearDir(that.backupDestDir);
         })
+    }
+    /**
+     * （同步）将备份文件信息对象写入backupRecords
+     * @param {Object} backupObj 
+     */
+    recordBackup(backupObj) {
+        let backupRecords = jsons.scRead(this.backupRecordsFilePath) || [];
+        backupRecords.push(backupObj);
+        writeFileSync(this.backupRecordsFilePath, JSON.stringify(backupRecords));
+    }
+    /**
+     * （同步）检查是否在Minecraft服务器运行过程中创建了增量备份
+     * @returns {Boolean} 是否创建了
+     * @note 实质上就是读backupRecords文件
+     */
+    backupExists() {
+        let backupRecords = jsons.scRead(that.backuper.backupRecordsFilePath);
+        if (backupRecords) {
+            return true;
+        } else {
+            return false;
+        }
     }
     /**
      * （异步）抛弃实例端和主控端的增量备份记录（这说明用不上这些备份了）
@@ -775,8 +795,7 @@ class Server extends ServerBase {
                     return utils.execScripts(that.endingScripts['upload'], that.execEnv, that.execDir);
                 }).then(res => {
                     // 清理增量备份记录，因为此时整个服务器端全部上传到了云储存，增量备份没用了
-                    let backupRecords = jsons.scRead(that.backupRecordsFilePath);
-                    if (backupRecords) {
+                    if (that.backuper.backupExists()) {
                         // 只有在有增量备份记录的情况下才清理
                         return that.backuper.discardRecords(backupRecords);
                     } else {
