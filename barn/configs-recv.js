@@ -4,11 +4,11 @@ const jsons = require('./json-scaffold');
 const utils = require('./utils');
 const path = require('path');
 // 实例端临时配置的文件名（如果这一项改了，Backend的源码也要改）
-const insTempConfigName = 'ins_side_configs.tmp.json';
+const INS_TEMP_CONFIG_NAME = 'ins_side_configs.tmp.json';
 // 获得命令行选项
-const cmdOptions = utils.optionsInArgs();
+const CMD_OPTIONS = utils.optionsInArgs();
 // 从命令行参数获得配置文件路径，默认/root/baseData
-const configPath = cmdOptions['data'] || cmdOptions['d'] || '/root/baseData';
+const CONFIG_FILE_PATH = CMD_OPTIONS['data'] || CMD_OPTIONS['d'] || '/root/baseData';
 // 配置储存在内存中
 var currentConfigs = {};
 
@@ -16,7 +16,7 @@ var currentConfigs = {};
  * 从临时配置文件中读取配置
  */
 function readTmpConfigs() {
-    let absPath = path.join(configPath, insTempConfigName);
+    let absPath = path.join(CONFIG_FILE_PATH, INS_TEMP_CONFIG_NAME);
     // 如果index.js所在目录下没有配置文件，就向上找一层
     currentConfigs = jsons.scRead(absPath);
     if (!currentConfigs) { // 找不到配置，退出进程

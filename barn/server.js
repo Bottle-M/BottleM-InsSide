@@ -4,7 +4,6 @@ const {
     promises: fs,
     writeFileSync,
     copyFileSync,
-    rmSync,
     statSync
 } = require('fs');
 const { ping } = require('minecraft-protocol');
@@ -537,8 +536,12 @@ class Server extends ServerBase {
             that = this;
         let idlingTime = 0, // 服务器空闲时间(ms)
             timeToBackup = 0; // 增量备份相关计时器(ms)
-        let counter, playerMonitor, processMonitor, terminationMonitor, idlingTimeSync, backupTimer;
-
+        let idlingCounter = null,
+            playerMonitor,
+            processMonitor,
+            terminationMonitor,
+            idlingTimeSyncer,
+            backupTimer;
         return new Promise((resolve, reject) => {
             if (!that.maintain) { // 维护模式下不监视服务器
                 let calcTimeLeft = (time) => { // 计算剩余时间
@@ -559,42 +562,14 @@ class Server extends ServerBase {
                         }
                     };
                 // 服务器空闲时间计时器，闲置时间过长就关服
-                counter = setInterval(counterFunc, 1000);
+                idlingCounter = setInterval(counterFunc, 1000);
                 // 将服务器剩余闲置时间同步到主控端
-                idlingTimeSync = setInterval(() => {
+                idlingTimeSyncer = setInterval(() => {
                     wsSender.send({
                         'action': 'idling_time_left',
                         'time': calcTimeLeft(idlingTime)
                     });
                 }, 5000);
-                // 玩家人数监视器（轮询周期10秒）
-                playerMonitor = setInterval(() => {
-                    ping({
-                        host: '127.0.0.1',
-                        port: 25565
-                    }).then(result => {
-                        let playersOnline = result.players['online'],
-                            playersMax = result.players['max'];
-                        if (playersOnline > 0) { // 有玩家在线
-                            clearInterval(counter); // 停止倒计时
-                            counter = null;
-                            // 如果配置了有玩家登录就重置倒计时
-                            if (resetTimeAfterLogin) {
-                                idlingTime = 0; // 重置闲置时间
-                                status.setVal('idling_time_left', calcTimeLeft(idlingTime)); // 更新服务器剩余闲置时间
-                            }
-                        } else if (counter === null) {
-                            // 没有玩家了，就继续倒计时
-                            counter = setInterval(counterFunc, 1000);
-                        }
-                        // 回传玩家人数
-                        wsSender.send({
-                            'action': 'players_num',
-                            'online': playersOnline,
-                            'max': playersMax
-                        });
-                    }).catch(err => 'nothing');
-                }, 10000);
                 // 监视Java进程(轮询周期5秒)
                 processMonitor = setInterval(() => {
                     that.scriptCheck('check_process').then(exists => {
@@ -627,6 +602,21 @@ class Server extends ServerBase {
                         logger.record(2, err);
                     });
                 }, 6000);
+                // 有玩家上线，暂停闲置时间计时器
+                utils.serverEvents.on('playerexists', () => {
+                    clearInterval(idlingCounter); // 停止倒计时
+                    idlingCounter = null;
+                    // 如果配置了有玩家登录就重置倒计时
+                    if (resetTimeAfterLogin) {
+                        idlingTime = 0; // 重置闲置时间
+                        status.setVal('idling_time_left', calcTimeLeft(idlingTime)); // 更新服务器剩余闲置时间
+                    }
+                })
+                // 无玩家在线，启动闲置时间计时器
+                utils.serverEvents.on('noplayer', () => {
+                    // 没有玩家了，就继续倒计时
+                    idlingCounter = setInterval(counterFunc, 1000);
+                });
             }
             // 如果开启了增量备份
             if (that.backupEnabled) {
@@ -662,13 +652,36 @@ class Server extends ServerBase {
                     urgent: false
                 });
             });
+            // 玩家人数监视器（轮询周期10秒）
+            playerMonitor = setInterval(() => {
+                ping({
+                    host: '127.0.0.1',
+                    port: 25565
+                }).then(result => {
+                    let playersOnline = result.players['online'],
+                        playersMax = result.players['max'];
+                    if (idlingCounter !== null && playersOnline > 0) {
+                        // 有玩家在线，且闲置时间计时器还在
+                        utils.serverEvents.emit('playerexists');
+                    } else if (idlingCounter === null) {
+                        // 无玩家在线，且还没有闲置计时器
+                        utils.serverEvents.emit('noplayer');
+                    }
+                    // 回传玩家人数
+                    wsSender.send({
+                        'action': 'players_num',
+                        'online': playersOnline,
+                        'max': playersMax
+                    });
+                }).catch(err => 'nothing');
+            }, 10000);
         }).then(result => {
             // 清理工作
-            clearInterval(counter); // 停止计时器
+            clearInterval(idlingCounter); // 停止计时器
             clearInterval(processMonitor);
             clearInterval(terminationMonitor);
             clearInterval(playerMonitor);
-            clearInterval(idlingTimeSync);
+            clearInterval(idlingTimeSyncer);
             clearInterval(backupTimer);
             return Promise.resolve(result); // result:{reason,stop,urgent}
         })

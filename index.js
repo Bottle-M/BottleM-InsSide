@@ -1,14 +1,13 @@
 'use strict';
-const configs = require('./barn/configs-recv');
-const router = require('./barn/router');
-const wsSender = require('./barn/ws-sender');
 const { WebSocketServer } = require('ws');
 const { refreshConfigs } = require('./barn/configs-recv');
-const wsPort = configs.getConfigs('ws_port');
-const deployment = require('./barn/server');
+const configs = require('./barn/configs-recv');
+const router = require('./barn/router');
+const WS_PORT = configs.getConfigs('ws_port');
+const Deployment = require('./barn/server');
 // 创建WebSocket服务器
 const wsServer = new WebSocketServer({
-    port: wsPort
+    port: WS_PORT
 });
 // WebSocket心跳处理
 const wsBeat = function () {
@@ -67,9 +66,9 @@ wsServer.on('close', () => {
 });
 
 // 创建Minecraft部署实例
-const ServerDeploy = new deployment();
+const serverDeploy = new Deployment();
 
 // 开始部署Minecraft服务器
-ServerDeploy.setup();
+serverDeploy.setup();
 
-console.log(`WebSocket server started on port ${wsPort}`);
+console.log(`WebSocket server started on port ${WS_PORT}`);

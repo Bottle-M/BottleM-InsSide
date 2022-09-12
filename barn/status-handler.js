@@ -6,7 +6,7 @@ const path = require('path');
 const utils = require('./utils');
 const wsSender = require('./ws-sender');
 // 状态记录文件的路径
-const statusFilePath = path.join(utils.workDir, 'ins_status.json');
+const STATUS_FILE_PATH = path.join(utils.workingDir, 'ins_status.json');
 
 // 默认状态配置
 const defaultStatus = {
@@ -15,10 +15,10 @@ const defaultStatus = {
 };
 
 try {
-    statSync(statusFilePath);
+    statSync(STATUS_FILE_PATH);
 } catch (e) {
     // 如果状态文件不存在，则创建一个新的
-    writeFileSync(statusFilePath, JSON.stringify(defaultStatus));
+    writeFileSync(STATUS_FILE_PATH, JSON.stringify(defaultStatus));
 }
 
 /**
@@ -28,7 +28,7 @@ try {
  * @returns {Boolean} 是否成功
  */
 function setVal(keys, values) {
-    return jsons.scSet(statusFilePath, keys, values);
+    return jsons.scSet(STATUS_FILE_PATH, keys, values);
 }
 
 /**
@@ -42,7 +42,7 @@ function update(code) {
         'action': 'status_sync',
         'status_code': code
     });
-    return jsons.scSet(statusFilePath, 'status_code', Number(code));
+    return jsons.scSet(STATUS_FILE_PATH, 'status_code', Number(code));
 }
 
 /**
@@ -51,7 +51,7 @@ function update(code) {
  * @returns 返回key对应的值或整个状态文件对象，获取错误会返回null
  */
 function getVal(key = '') {
-    let status = jsons.scRead(statusFilePath);
+    let status = jsons.scRead(STATUS_FILE_PATH);
     if (status) {
         return key ? status[key] : status;
     } else {

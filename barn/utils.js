@@ -1,13 +1,13 @@
 // 能用到的工具函数或者属性
 'use strict';
 const { readdirSync, writeFileSync, rmSync, statSync, mkdirSync, promises: fs } = require('fs');
-const path = require('path');
-const workDir = process.cwd();
-const lockFilePath = path.join(workDir, 'deploy.lock');
 const { exec } = require('child_process');
 const { EventEmitter } = require('events');
+const path = require('path');
 /** Server模块相关的事件*/
 const serverEvents = new EventEmitter();
+const WORKING_DIR = process.cwd();
+const LOCK_FILE_PATH = path.join(WORKING_DIR, 'deploy.lock');
 
 /**
  * 执行一组bash脚本
@@ -195,11 +195,11 @@ function showMemUsage() {
  */
 function lockDeploy(operate) {
     if (operate) {
-        writeFileSync(lockFilePath, Date.now().toString(), {
+        writeFileSync(LOCK_FILE_PATH, Date.now().toString(), {
             encoding: 'utf8'
         });
     } else {
-        rmSync(lockFilePath);
+        rmSync(LOCK_FILE_PATH);
     }
 }
 
@@ -209,7 +209,7 @@ function lockDeploy(operate) {
  */
 function deployed() {
     try {
-        statSync(lockFilePath);
+        statSync(LOCK_FILE_PATH);
     } catch (e) {
         return false;
     }
@@ -242,7 +242,7 @@ function optionsInArgs() {
 module.exports = {
     // 考虑到到时候可能要打包成可执行文件，这里用process.cwd()
     // 注意，process.cwd()代表的index.js所在目录，也就是程序执行入口所在目录
-    workDir,
+    workingDir: WORKING_DIR,
     optionsInArgs,
     lockDeploy,
     deployed,

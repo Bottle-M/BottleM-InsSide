@@ -1,9 +1,6 @@
 // 小型JSON文件读取模块
 'use strict';
 const { promises: fs, readFileSync, writeFileSync } = require('fs'); // 载入基于Promise的文件系统模块
-const path = require('path');
-const utils = require('./utils');
-
 /**
 * （异步）小文件JSON读取
 * @param {String} jPath 文件绝对路径

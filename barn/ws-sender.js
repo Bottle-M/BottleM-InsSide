@@ -1,7 +1,7 @@
 // 储存WebSocket连接的模块
 'use strict';
-const discardTimeout = 60000; // 消息最多遗留多久，超过这个时间的消息会放弃发送，单位毫秒
-const pollInterval = 500; // 未发送消息的轮询间隔
+const DISCARD_TIMEOUT = 60000; // 消息最多遗留多久，超过这个时间的消息会放弃发送，单位毫秒
+const POLL_INTERVAL = 500; // 未发送消息的轮询间隔
 var mainConnection = null;
 var dataSending = false; // 是否正在发送数据
 
@@ -61,13 +61,13 @@ function send(respObj, urgent = false) {
                         resolve();
                     });
                 }
-                waitedFor += pollInterval;
+                waitedFor += POLL_INTERVAL;
                 // 非紧急消息，等待了一段时间消息还没发出去，就抛弃
-                if (!urgent && waitedFor >= discardTimeout) {
+                if (!urgent && waitedFor >= DISCARD_TIMEOUT) {
                     clearInterval(timer);
                     console.error(`Error while sending data through WebSocket: ${err}`); // 消息发送失败
                 }
-            }, pollInterval);
+            }, POLL_INTERVAL);
     });
 }
 
