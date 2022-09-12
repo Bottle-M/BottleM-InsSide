@@ -32,7 +32,7 @@ class ServerBase {
                 script_exec_dir: execDir,
                 rcon: rconConfigs,
                 under_maintenance: underMaintenance, // 维护模式
-                restore_before_deploy: restoreBeforeDeploy, // 部署前恢复增量备份
+                restore_before_launch: restoreBeforeLaunch, // 部署前恢复增量备份
                 backup_records,
                 env
             } = allConfigs;
@@ -40,7 +40,7 @@ class ServerBase {
         // 取到之前的备份记录，如果没有就是null
         this.previouBackupRecs = backup_records;
         this.underMaintenance = underMaintenance;
-        this.restoreBeforeDeploy = restoreBeforeDeploy;
+        this.restoreBeforeLaunch = restoreBeforeLaunch;
         this.rconConfigs = rconConfigs;
         // 脚本存放的目录
         this.dataDir = dataDir;
@@ -371,6 +371,9 @@ class Server extends ServerBase {
     setup() {
         let that = this;
         console.log('Starting to deploy Minecraft Server');
+        // 回传给主控端目前的部署配置（用于DEBUG）
+        logger.record(1, `[Configs]Under maintenance:${this.maintain}`);
+        logger.record(1, `[Configs]Restore incremental backups before launch:${this.restoreBeforeLaunch}`);
         utils.showMemUsage();
         this.deploy()
             .then(resume => that.waiter(resume)) // 等待Minecraft服务器启动
@@ -416,11 +419,11 @@ class Server extends ServerBase {
             // 检查是否需要先恢复增量备份
             // 先保证previouBackupRecs不为null
             if (that.previouBackupRecs) {
-                if (that.restoreBeforeDeploy === 'discard') {
+                if (that.restoreBeforeLaunch === 'discard') {
                     // 如果是丢弃增量备份
                     logger.record(1, 'Discarding previous incremental backups');
                     return that.backuper.discardRecords();
-                } else if (that.restoreBeforeDeploy) {
+                } else if (that.restoreBeforeLaunch) {
                     logger.record(1, 'Restoring previous incremental backups');
                     // 恢复增量备份
                     return that.backuper.restoreAll(that.previouBackupRecs)
@@ -445,11 +448,12 @@ class Server extends ServerBase {
                     }
                     // 将扫描出来的压缩包大小写入状态文件
                     status.setVal('previous_packed_size', dirSize);
-                    utils.clearDir(packedServerDir) // 清空目录
-                        .catch(err => {
-                            logger.record(2, `Failed to clear packed server directory: ${err}`);
-                        });
                 }
+                // 就算是维护模式，也要清除packedServerDir目录
+                utils.clearDir(packedServerDir) // 清空目录
+                    .catch(err => {
+                        logger.record(2, `Failed to clear packed server directory: ${err}`);
+                    });
                 resolve();
             });
         }).then(res => {
