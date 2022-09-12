@@ -240,7 +240,7 @@ class IncBackup extends ServerBase {
      * @note 实质上就是读backupRecords文件
      */
     backupExists() {
-        let backupRecords = jsons.scRead(that.backuper.backupRecordsFilePath);
+        let backupRecords = jsons.scRead(this.backupRecordsFilePath);
         if (backupRecords) {
             return true;
         } else {
