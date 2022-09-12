@@ -235,17 +235,12 @@ class IncBackup extends ServerBase {
         writeFileSync(this.backupRecordsFilePath, JSON.stringify(backupRecords));
     }
     /**
-     * （同步）检查是否在Minecraft服务器运行过程中创建了增量备份
-     * @returns {Boolean} 是否创建了
+     * （同步）读取在Minecraft服务器运行过程中创建的增量备份记录
+     * @returns {Array|null} 备份记录组成的数组，失败则返回null
      * @note 实质上就是读backupRecords文件
      */
-    backupExists() {
-        let backupRecords = jsons.scRead(this.backupRecordsFilePath);
-        if (backupRecords) {
-            return true;
-        } else {
-            return false;
-        }
+    getRecords() {
+        return jsons.scRead(this.backupRecordsFilePath);
     }
     /**
      * （异步）抛弃实例端和主控端的增量备份记录（这说明用不上这些备份了）
@@ -795,7 +790,8 @@ class Server extends ServerBase {
                     return utils.execScripts(that.endingScripts['upload'], that.execEnv, that.execDir);
                 }).then(res => {
                     // 清理增量备份记录，因为此时整个服务器端全部上传到了云储存，增量备份没用了
-                    if (that.backuper.backupExists()) {
+                    let backupRecords = that.backuper.getRecords();
+                    if (backupRecords) {
                         // 只有在有增量备份记录的情况下才清理
                         return that.backuper.discardRecords(backupRecords);
                     } else {
