@@ -18,7 +18,12 @@ function record(level, msg, error = false) {
             'time': time, // 同步时间
             'error': error // 是否发生错误
         };
-    wsSender.send(newLog); // 发送日志
+    if (level === 1) {
+        wsSender.send(newLog); // 发送日志
+    } else {
+        // 警告或者错误必须要发到主控端
+        wsSender.send(newLog, true);
+    }
     console.log(msg); // 输出到控制台
 }
 
