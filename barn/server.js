@@ -24,7 +24,7 @@ class ServerBase {
     constructor() {
         let allConfigs = configs.getConfigs(),
             {
-                remote_dir: dataDir,
+                data_dir: dataDir,
                 deploy_scripts: deployScripts,
                 launch_script: launchScript,
                 server_scripts: serverScripts,
