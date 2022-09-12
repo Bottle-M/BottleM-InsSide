@@ -791,6 +791,7 @@ class Server extends ServerBase {
                 }).then(res => {
                     // 清理增量备份记录，因为此时整个服务器端全部上传到了云储存，增量备份没用了
                     let backupRecords = that.backuper.getRecords();
+                    console.log('GET RECORDS:', backupRecords);
                     if (backupRecords) {
                         // 只有在有增量备份记录的情况下才清理
                         return that.backuper.discardRecords(backupRecords);
