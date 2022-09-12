@@ -39,6 +39,8 @@ class ServerBase {
         this.configs = allConfigs;
         // 取到之前的备份记录，如果没有就是null
         this.previouBackupRecs = backup_records;
+        // 记录增量备份文件的文件的路径
+        this.backupRecordsFilePath = path.join(dest_dir, './backup-records.json');
         this.underMaintenance = underMaintenance;
         this.restoreBeforeLaunch = restoreBeforeLaunch;
         this.rconConfigs = rconConfigs;
@@ -199,13 +201,18 @@ class IncBackup extends ServerBase {
                 console.log(`[Backup]Successfully made backup for: ${srcDirPath}`);
             }
             // 写入新的增量备份信息
-            let backupName = `bk-${Date.now()}`; // 备份名
+            let backupName = `bk-${Date.now()}`, // 备份名
+                backupObj = {
+                    action: 'backup_sync',
+                    name: backupName,
+                    time: Date.now()
+                },
+                backupRecords = jsons.scRead(that.backupRecordsFilePath) || [];
             // 回传给主控端
-            wsSender.send({
-                action: 'backup_sync',
-                name: backupName,
-                time: Date.now()
-            }, true); // urgent=true，必须要发到主控端
+            wsSender.send(backupObj, true); // urgent=true，必须要发到主控端
+            // 记录备份信息
+            backupRecords.push(backupObj);
+            writeFileSync(that.backupRecordsFilePath, JSON.stringify(backupRecords));
             // 初始化完成
             that.initialized = true;
             resolve(backupName);
@@ -222,30 +229,28 @@ class IncBackup extends ServerBase {
     }
     /**
      * （异步）抛弃实例端和主控端的增量备份记录（这说明用不上这些备份了）
+     * @param {Array} records 要删除的增量备份记录
      * @returns {Promise}
      * @note 仅在实例端启动时/正常结束流程时调用
      * @note Minecraft服务器运行时的增量备份是不允许丢弃的
      */
-    discardRecords() {
-        // 未开启增量备份功能或者未初始化
-        if (!this.enable || !this.initialized)
+    discardRecords(records) {
+        // 未开启增量备份功能或者未初始化或者没有备份记录
+        if (!this.enable || !this.initialized || !records)
             return Promise.resolve();
         logger.record(1, 'Discarding unneeded incremental backups...');
         let that = this;
-        return new Promise((resolve, reject) => {
-            // 删除实例端的增量备份记录
-            // 通知主控端也删除增量备份记录
-            resolve(
-                wsSender.send({
-                    action: 'revoke_backup' // 抛弃增量备份记录
-                }, true) // urgent=true,必须要发到主控端
-            );
-        }).then(res => {
+        // 删除实例端的增量备份记录
+        // 通知主控端也删除增量备份记录
+        wsSender.send({
+            action: 'revoke_backup' // 抛弃增量备份记录
+            // urgent=true,必须要发到主控端
+        }, true).then(res => {
             // 通过脚本移除云储存中的增量备份
             let backupNameList = ''; // 备份文件名列表（不包括文件后缀名）
-            if (that.previouBackupRecs) {
+            if (records && records.length > 0) {
                 // 拼接成Bash脚本能识别的列表
-                backupNameList = that.previouBackupRecs.map(rec => rec.name).join(' ');
+                backupNameList = records.map(rec => rec.name).join(' ');
             }
             return utils.execScripts(that.backupScripts['discard'], Object.assign({
                 // 特别环境变量BACKUP_NAME_LIST，用于指定备份文件名列表
@@ -422,13 +427,13 @@ class Server extends ServerBase {
                 if (that.restoreBeforeLaunch === 'discard') {
                     // 如果是丢弃增量备份
                     logger.record(1, 'Discarding previous incremental backups');
-                    return that.backuper.discardRecords();
+                    return that.backuper.discardRecords(that.previouBackupRecs);
                 } else if (that.restoreBeforeLaunch) {
                     logger.record(1, 'Restoring previous incremental backups');
                     // 恢复增量备份
                     return that.backuper.restoreAll(that.previouBackupRecs)
                         // 恢复后删除增量备份记录
-                        .then(res => that.backuper.discardRecords())
+                        .then(res => that.backuper.discardRecords(that.previouBackupRecs))
                 }
             }
             return Promise.resolve(); // 跳过
@@ -770,7 +775,13 @@ class Server extends ServerBase {
                     return utils.execScripts(that.endingScripts['upload'], that.execEnv, that.execDir);
                 }).then(res => {
                     // 清理增量备份记录，因为此时整个服务器端全部上传到了云储存，增量备份没用了
-                    return that.backuper.discardRecords();
+                    let backupRecords = jsons.scRead(that.backupRecordsFilePath);
+                    if (backupRecords) {
+                        // 只有在有增量备份记录的情况下才清理
+                        return that.backuper.discardRecords(backupRecords);
+                    } else {
+                        return Promise.resolve();
+                    }
                 });
         } else {
             // 紧急情况下，进行增量备份并上传
