@@ -377,8 +377,8 @@ class Server extends ServerBase {
         super();
         // 是否开启增量备份
         let { enable: backupEnabled } = this.configs['incremental_backup'];
-        this.backupEnabled = backupEnabled;
-        this.maintain = this.underMaintenance;
+        this._backupEnabled = backupEnabled;
+        this._maintain = this.underMaintenance;
         // 创建增量备份的实例
         this.backuper = new IncBackup();
         // 检查目录是否存在
@@ -392,9 +392,11 @@ class Server extends ServerBase {
         let that = this;
         console.log('Starting to deploy Minecraft Server');
         // 回传给主控端目前的部署配置（用于DEBUG）
-        logger.record(1, `[Configs]Under maintenance:${this.maintain}`);
+        logger.record(1, `[Configs]Under maintenance:${this._maintain}`);
         logger.record(1, `[Configs]Restore incremental backups before launch:${this.restoreBeforeLaunch}`);
         utils.showMemUsage();
+        // 部署前获取一次当前的状态码，以便resume
+        this._initialStatusCode = status.getVal('status_code');
         this.deploy()
             .then(resume => that.waiter(resume)) // 等待Minecraft服务器启动
             .then(res => that.monitor()) // 部署成功后由monitor监视Minecraft服务器
@@ -457,7 +459,7 @@ class Server extends ServerBase {
             return new Promise((resolve, reject) => {
                 // check_packed_server_size>0，说明要检查
                 // 另外，如果是维护模式，则不检查压缩包大小
-                if (!that.maintain && checkPackedSize > 0) {
+                if (!that._maintain && checkPackedSize > 0) {
                     // 计算服务器启动目录
                     let dirSize = utils.calcDirSize(packedServerDir);
                     // 如果扫描出来发现是空目录
@@ -494,6 +496,10 @@ class Server extends ServerBase {
         // Minecraft服务器启动超时时间
         let launchTimeout = this.configs['mc_server_launch_timeout'],
             that = this;
+        if (this._initialStatusCode >= 2400) {
+            // resume的时候状态码>=2400，说明非正常退出，直接resolve，快进到打包上传
+            return Promise.resolve();
+        }
         status.update(2203); // 设置状态码为2203，表示正在等待Minecraft服务器启动
         return new Promise((resolve, reject) => {
             // 等待Minecraft服务器启动，轮询间隔为10s
@@ -546,6 +552,14 @@ class Server extends ServerBase {
      * @returns {Promise}
      */
     monitor() {
+        if (this._initialStatusCode >= 2400) {
+            // resume的时候状态码>=2400，说明非正常退出，直接resolve，快进到打包上传
+            return Promise.resolve({
+                reason: 'Resuming...',
+                stop: true,
+                urgent: false
+            });
+        }
         console.log('Server Successfully Deployed!');
         status.update(2300); // 设置状态码为2300，表示服务器成功部署
         // 开启RCON连接
@@ -567,7 +581,7 @@ class Server extends ServerBase {
             idlingTimeSyncer,
             backupTimer;
         return new Promise((resolve, reject) => {
-            if (!that.maintain) { // 维护模式下不监视服务器
+            if (!that._maintain) { // 维护模式下不监视服务器
                 let calcTimeLeft = (time) => { // 计算剩余时间
                     return Math.floor((maxIdlingTime - time) / 1000);
                 },
@@ -643,7 +657,7 @@ class Server extends ServerBase {
                 });
             }
             // 如果开启了增量备份
-            if (that.backupEnabled) {
+            if (that._backupEnabled) {
                 // 每一秒倒计时一次
                 backupTimer = setInterval(() => {
                     timeToBackup += 1000;
@@ -754,6 +768,10 @@ class Server extends ServerBase {
      * @note 紧急情况下会立刻进行一次增量备份并上传，普通情况会压缩整个Minecraft服务器目录并上传
      */
     packAndUpload(options) {
+        if (this._initialStatusCode >= 2500) {
+            // 如果初始状态码>=2500，说明服务器已经关闭，无需再执行打包上传
+            return Promise.resolve();
+        }
         let {
             packed_server_dir: packedServerDir, // 压缩包目录
             check_packed_server_size: checkPackedSize// 检查压缩包大小百分比
@@ -763,41 +781,50 @@ class Server extends ServerBase {
         status.update(2401); // 更新状态：服务器正准备关闭-打包中
         logger.record(1, `Server closing: ${reason}`); // 报告给主控端
         // 如果没有开启备份，无法进入紧急模式
-        if (!urgent || !this.backupEnabled) {
+        if (!urgent || !this._backupEnabled) {
             // 普通情况下的关服
             // 执行压缩打包脚本
             logger.record(1, `Normally packing up the server...`);
-            return utils.execScripts(this.endingScripts['pack'], this.execEnv, this.execDir)
-                .then(stdouts => {
-                    return new Promise((resolve, reject) => {
-                        // 非维护模式，且配置了check_packed_server_size
-                        if (!that.maintain && checkPackedSize > 0) {
-                            // 计算当前压缩包目录的大小
-                            let packDirSize = utils.calcDirSize(packedServerDir),
-                                // 获得部署时的压缩包目录大小
-                                previousPackSize = status.getVal('previous_packed_size');
-                            if (packDirSize < previousPackSize * (0.01 * checkPackedSize)) {
-                                // 压缩包目录的大小小于部署时大小的checkPackedSize%，这个时候肯定出现了问题，终止打包
-                                reject('There\'s something wrong with the compressed packs of Minecraft Server, please check it.');
-                                return;
-                            }
+            return new Promise((resolve) => {
+                if (that._initialStatusCode > 2401) {
+                    // resume的时候状态码>2401，说明打包脚本已经执行过
+                    resolve();
+                } else {
+                    resolve(
+                        utils.execScripts(this.endingScripts['pack'], this.execEnv, this.execDir)
+                    );
+                }
+            }).then(stdouts => {
+                return new Promise((resolve, reject) => {
+                    // 非维护模式，且配置了check_packed_server_size
+                    if (!that._maintain && checkPackedSize > 0) {
+                        logger.record(1, `Checking the size of the packed server...`);
+                        // 计算当前压缩包目录的大小
+                        let packDirSize = utils.calcDirSize(packedServerDir),
+                            // 获得部署时的压缩包目录大小
+                            previousPackSize = status.getVal('previous_packed_size');
+                        if (packDirSize < previousPackSize * (0.01 * checkPackedSize)) {
+                            // 压缩包目录的大小小于部署时大小的checkPackedSize%，这个时候肯定出现了问题，终止打包
+                            reject('There\'s something wrong with the compressed packs of Minecraft Server, please check it.');
+                            return;
                         }
-                        resolve();
-                    });
-                }).then(res => {
-                    status.update(2402); // 更新状态：服务器正准备关闭-上传中
-                    // 压缩包没有问题，开始上传
-                    return utils.execScripts(that.endingScripts['upload'], that.execEnv, that.execDir);
-                }).then(res => {
-                    // 清理增量备份记录，因为此时整个服务器端全部上传到了云储存，增量备份没用了
-                    let backupRecords = that.backuper.getRecords();
-                    if (backupRecords) {
-                        // 只有在有增量备份记录的情况下才清理
-                        return that.backuper.discardRecords(backupRecords);
-                    } else {
-                        return Promise.resolve();
                     }
+                    resolve();
                 });
+            }).then(res => {
+                status.update(2402); // 更新状态：服务器正准备关闭-上传中
+                // 压缩包没有问题，开始上传
+                return utils.execScripts(that.endingScripts['upload'], that.execEnv, that.execDir);
+            }).then(res => {
+                // 清理增量备份记录，因为此时整个服务器端全部上传到了云储存，增量备份没用了
+                let backupRecords = that.backuper.getRecords();
+                if (backupRecords && backupRecords.length > 0) {
+                    // 只有在有增量备份记录的情况下才清理
+                    return that.backuper.discardRecords(backupRecords);
+                } else {
+                    return Promise.resolve();
+                }
+            });
         } else {
             // 紧急情况下，进行增量备份并上传
             logger.record(1, `Urgently uploading the server...`);
