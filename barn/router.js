@@ -38,6 +38,9 @@ module.exports = function (recvObj, ws) {
         case 'kill':
             utils.serverEvents.emit('kill'); // 激发杀死事件
             break;
+        case 'revive':
+            utils.serverEvents.emit('revive'); // 激发复活事件
+            break;
     }
     wsSender.send(respObj); // 发送响应
 }

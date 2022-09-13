@@ -376,13 +376,19 @@ class Server extends ServerBase {
     constructor() {
         super();
         // 是否开启增量备份
-        let { enable: backupEnabled } = this.configs['incremental_backup'];
+        let { enable: backupEnabled } = this.configs['incremental_backup'],
+            that = this;
         this._backupEnabled = backupEnabled;
         this._maintain = this.underMaintenance;
         // 创建增量备份的实例
         this.backuper = new IncBackup();
         // 检查目录是否存在
         utils.dirCheck(this.execDir);
+        // 监听复活(忽略错误，尝试从上次的地方重新开始运行)信号
+        utils.serverEvents.on('revive', () => {
+            logger.record(1, 'Reviving the InsSide...');
+            that.setup(); // 重新进入部署流程
+        });
     }
     /**
      * 服务器启动入口
@@ -390,11 +396,9 @@ class Server extends ServerBase {
      */
     setup() {
         let that = this;
-        console.log('Starting to deploy Minecraft Server');
         // 回传给主控端目前的部署配置（用于DEBUG）
         logger.record(1, `[Configs]Under maintenance:${this._maintain}`);
         logger.record(1, `[Configs]Restore incremental backups before launch:${this.restoreBeforeLaunch}`);
-        utils.showMemUsage();
         // 部署前获取一次当前的状态码，以便resume
         this._initialStatusCode = status.getVal('status_code');
         this.deploy()
@@ -482,7 +486,6 @@ class Server extends ServerBase {
             // 启动Minecraft服务器
             return utils.execScripts(that.launchScript, that.execEnv, that.execDir);
         }).then(res => {
-            utils.showMemUsage();
             return Promise.resolve(false);
         });
     }

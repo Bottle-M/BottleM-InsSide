@@ -72,3 +72,4 @@ const serverDeploy = new Deployment();
 serverDeploy.setup();
 
 console.log(`WebSocket server started on port ${WS_PORT}`);
+console.log('Starting to deploy Minecraft Server');
