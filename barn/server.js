@@ -556,10 +556,12 @@ class Server extends ServerBase {
      */
     monitor() {
         if (this._initialStatusCode >= 2400) {
-            // resume的时候状态码>=2400，说明非正常退出，直接resolve，快进到打包上传
+            // resume的时候状态码>=2400，说明非正常退出时已经离开monitor了
+            // >=2401时已经保证服务器关闭了，跳过关服流程
+            let stopServer = this._initialStatusCode >= 2401 ? false : true;
             return Promise.resolve({
                 reason: 'Resuming...',
-                stop: true,
+                stop: stopServer,
                 urgent: false
             });
         }
