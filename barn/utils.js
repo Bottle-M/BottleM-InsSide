@@ -176,20 +176,6 @@ function dirCheck(dirPath) {
 }
 
 /**
- * 显示内存使用情况
- */
-function showMemUsage() {
-    let mem = process.memoryUsage();
-    console.log('-------MEMORY------');
-    console.log(`rss: ${mem.rss}`);
-    console.log(`heapTotal: ${mem.heapTotal}`);
-    console.log(`heapUsed: ${mem.heapUsed}`);
-    console.log(`external: ${mem.external}`);
-    console.log(`arrayBuffers: ${mem.arrayBuffers}`);
-    console.log('-------------------');
-}
-
-/**
  * 锁定/解除锁定部署
  * @param {Boolean} operate 是否锁定
  */
@@ -247,7 +233,6 @@ module.exports = {
     lockDeploy,
     deployed,
     dirCheck,
-    showMemUsage,
     calcDirSize,
     scanDirMTime,
     execScripts,

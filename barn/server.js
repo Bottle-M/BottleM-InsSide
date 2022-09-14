@@ -375,13 +375,13 @@ class Server extends ServerBase {
      */
     constructor() {
         super();
-        // 是否开启增量备份
-        let { enable: backupEnabled } = this.configs['incremental_backup'],
-            that = this;
-        this._backupEnabled = backupEnabled;
+        let that = this,
+            // 创建增量备份的实例
+            backuper = new IncBackup();
         this._maintain = this.underMaintenance;
-        // 创建增量备份的实例
-        this.backuper = new IncBackup();
+        // 是否开启增量备份
+        this._backupEnabled = backuper.enable;
+        this.backuper = backuper;
         // 检查目录是否存在
         utils.dirCheck(this.execDir);
         // 监听复活(忽略错误，尝试从上次的地方重新开始运行)信号
