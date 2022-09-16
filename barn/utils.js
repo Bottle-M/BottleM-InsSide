@@ -1,13 +1,82 @@
 // 能用到的工具函数或者属性
 'use strict';
-const { readdirSync, writeFileSync, rmSync, statSync, mkdirSync, promises: fs } = require('fs');
+const {
+    readdirSync,
+    writeFileSync,
+    rmSync,
+    statSync,
+    mkdirSync,
+    promises: fs
+} = require('fs');
+const readLine = require('readline');
 const { exec } = require('child_process');
 const { EventEmitter } = require('events');
 const path = require('path');
 /** Server模块相关的事件*/
 const serverEvents = new EventEmitter();
 const WORKING_DIR = process.cwd();
+// 部署锁定文件路径
 const LOCK_FILE_PATH = path.join(WORKING_DIR, 'deploy.lock');
+// Minecraft日志读取字节数记录文件
+const MC_LOG_BYTES_FILE_PATH = path.join(WORKING_DIR, '.mc_log_read_bytes');
+
+/**
+ * （异步）比对出Minecraft日志中更新的部分并返回
+ * @param {String} mcLogPath Minecraft日志(latest.log)的绝对路径
+ * @returns {Promise} resolve一个对象{logStr(日志字符串),logReread(是否重读了)}，reject读取失败
+ * @note 因为Minecraft服务器日志是追加写入的，每次从开服到关服的日志写在一个日志文件中.
+ */
+function logDiff(mcLogPath) {
+    return fs.readFile(MC_LOG_BYTES_FILE_PATH, {
+        encoding: 'utf8' // 不指定这个的话，返回的是buffer
+    }).then(record => record.split(' ').map(Number))
+        .catch(err => [0, 0]) // 文件不存在就从0开始读取
+        .then(record => {
+            // 获得上次读到的字节数和上次的文件大小
+            let [lastReadBytes, lastFileSize] = record;
+            return fs.open(mcLogPath, 'r')
+                .then(fileHandle => {
+                    return fileHandle.stat() // 获得文件信息
+                        .then(stat => Promise.resolve({
+                            currentFileSize: stat.size,
+                            fileHandle
+                        }));
+                }).then(resObj => {
+                    const { currentFileSize, fileHandle } = resObj;
+                    let logReread = false; // 是否重读文件
+                    // 如果文件大小变小了，说明日志肯定被修改了，从头开始读取
+                    if (currentFileSize < lastFileSize) {
+                        lastReadBytes = 0;
+                        logReread = true;
+                    }
+                    return fileHandle.read({
+                        position: lastReadBytes // 从上次读的地方继续往下读
+                    }).then(resObj => {
+                        // 将这些信息一同resolve
+                        resObj['lastReadBytes'] = lastReadBytes;
+                        resObj['currentFileSize'] = currentFileSize;
+                        resObj['logReread'] = logReread;
+                        return Promise.resolve(resObj);
+                    })
+                });
+        }).then(resObj => {
+            const {
+                buffer,
+                bytesRead,
+                lastReadBytes,
+                currentFileSize,
+                logReread
+            } = resObj;
+            const logStr = buffer.toString('utf8'); // 转为字符串
+            const currentReadBytes = lastReadBytes + bytesRead; // 计算当前读到的字节数
+            // 将这次读取的字节数和文件大小写入文件
+            return fs.writeFile(MC_LOG_BYTES_FILE_PATH, `${currentReadBytes} ${currentFileSize}`)
+                .then(res => Promise.resolve({
+                    logStr,
+                    logReread
+                })); // 最后将日志字符串和是否重读文件resolve出去
+        })
+}
 
 /**
  * 执行一组bash脚本
@@ -229,6 +298,7 @@ module.exports = {
     // 考虑到到时候可能要打包成可执行文件，这里用process.cwd()
     // 注意，process.cwd()代表的index.js所在目录，也就是程序执行入口所在目录
     workingDir: WORKING_DIR,
+    logDiff,
     optionsInArgs,
     lockDeploy,
     deployed,

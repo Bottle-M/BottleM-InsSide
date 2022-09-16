@@ -4,7 +4,9 @@ const {
     promises: fs,
     writeFileSync,
     copyFileSync,
-    statSync
+    statSync,
+    watchFile,
+    unwatchFile
 } = require('fs');
 const { ping } = require('minecraft-protocol');
 const path = require('path');
@@ -34,9 +36,12 @@ class ServerBase {
                 under_maintenance: underMaintenance, // 维护模式
                 restore_before_launch: restoreBeforeLaunch, // 部署前恢复增量备份
                 backup_records,
-                env
+                env,
+                mc_server_log
             } = allConfigs;
         this.configs = allConfigs;
+        // 获得Minecraft服务器的日志文件路径
+        this.mcServerLogPath = mc_server_log;
         // 取到之前的备份记录，如果没有就是null
         this.previouBackupRecs = backup_records;
         this.underMaintenance = underMaintenance;
@@ -585,7 +590,25 @@ class Server extends ServerBase {
             terminationMonitor,
             idlingTimeSyncer,
             backupTimer;
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
+            // 创建日志监视器(3秒轮询一次)
+            watchFile(that.mcServerLogPath, {
+                interval: 3007
+            }, (curr, prev) => {
+                // 日志发生更新
+                // 找出日志更新的部分并返回
+                utils.logDiff(that.mcServerLogPath)
+                    .then(resObj => {
+                        const { logStr, logReread } = resObj;
+                        wsSender.send({
+                            action: 'mc_log_sync',
+                            logs: logStr,
+                            reread: logReread // 是否重读了日志文件
+                        }, true); // 保证日志回传到主控端
+                    }).catch(err => {
+                        logger.record(2, `Error occured while reading Minecraft log file: ${err}`);
+                    })
+            });
             if (!that._maintain) { // 维护模式下不监视服务器
                 let calcTimeLeft = (time) => { // 计算剩余时间
                     return Math.floor((maxIdlingTime - time) / 1000);
@@ -720,6 +743,7 @@ class Server extends ServerBase {
             }, 10000);
         }).then(result => {
             // 清理工作
+            unwatchFile(that.mcServerLogPath); // 停止监听日志
             clearInterval(idlingCounter); // 停止计时器
             clearInterval(processMonitor);
             clearInterval(terminationMonitor);
