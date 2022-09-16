@@ -7,7 +7,8 @@ const WS_PORT = configs.getConfigs('ws_port');
 const Deployment = require('./barn/server');
 // 创建WebSocket服务器
 const wsServer = new WebSocketServer({
-    port: WS_PORT
+    port: WS_PORT,
+    clientTracking: true
 });
 // WebSocket心跳处理
 const wsBeat = function () {
@@ -24,8 +25,13 @@ wsServer.on('connection', (ws) => {
     if (!authedConn) {
         refreshConfigs(); // 重读配置
         ws.on('message', (message) => {
-            let parsed = JSON.parse(message),
+            let parsed,
                 secret = configs.getConfigs('secret_key');
+            try { // 防止因为JSON.parse出错导致程序崩溃
+                parsed = JSON.parse(message);
+            } catch (e) {
+                parsed = {};
+            }
             // 每条通信都必须要经过密匙验证
             if (!secret || parsed['key'] !== secret) {
                 return ws.close(1000, 'Nanoconnection, son.'); // 关闭连接
