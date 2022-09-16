@@ -27,6 +27,7 @@ const MC_LOG_BYTES_FILE_PATH = path.join(WORKING_DIR, '.mc_log_read_bytes');
  * @note 因为Minecraft服务器日志是追加写入的，每次从开服到关服的日志写在一个日志文件中.
  */
 function logDiff(mcLogPath) {
+    const MAX_READ_BYTES = 3 * 1024 * 1024; // 最多读取3MB的日志
     return fs.readFile(MC_LOG_BYTES_FILE_PATH, {
         encoding: 'utf8' // 不指定这个的话，返回的是buffer
     }).then(record => record.split(' ').map(Number))
@@ -43,19 +44,28 @@ function logDiff(mcLogPath) {
                         }));
                 }).then(resObj => {
                     const { currentFileSize, fileHandle } = resObj;
-                    let logReread = false; // 是否重读文件
+                    let logReread = false, // 是否重读文件
+                        allocSize = currentFileSize; // 分配给buffer的大小
                     // 如果文件大小变小了，说明日志肯定被修改了，从头开始读取
                     if (currentFileSize < lastFileSize) {
                         lastReadBytes = 0;
                         logReread = true;
                     }
+                    // 如果需要读取的日志部分大小已经超过了规定
+                    if (currentFileSize - lastReadBytes > MAX_READ_BYTES) {
+                        // 把文件读取起始位置移到最后5MB的位置
+                        lastReadBytes = currentFileSize - MAX_READ_BYTES;
+                        allocSize = MAX_READ_BYTES;
+                    }
                     return fileHandle.read({
+                        buffer: Buffer.alloc(allocSize),
                         position: lastReadBytes // 从上次读的地方继续往下读
                     }).then(resObj => {
                         // 将这些信息一同resolve
                         resObj['lastReadBytes'] = lastReadBytes;
                         resObj['currentFileSize'] = currentFileSize;
                         resObj['logReread'] = logReread;
+                        fileHandle.close();
                         return Promise.resolve(resObj);
                     })
                 });
@@ -67,7 +77,8 @@ function logDiff(mcLogPath) {
                 currentFileSize,
                 logReread
             } = resObj;
-            const logStr = buffer.toString('utf8'); // 转为字符串
+            // 注意这里必须要把三个参数都传到位，不然会把buffer剩余的空值都读到字符串中
+            const logStr = buffer.toString('utf8', 0, bytesRead); // 转为字符串
             const currentReadBytes = lastReadBytes + bytesRead; // 计算当前读到的字节数
             // 将这次读取的字节数和文件大小写入文件
             return fs.writeFile(MC_LOG_BYTES_FILE_PATH, `${currentReadBytes} ${currentFileSize}`)
