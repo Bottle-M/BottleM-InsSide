@@ -522,11 +522,6 @@ class Server extends ServerBase {
                         port: 25565
                     }).then(result => { // ping到服务器，表示服务器已经启动
                         clearInterval(timer); // 停止轮询
-                        // (非resume模式)通知主控端：服务器已经成功启动
-                        if (!resume)
-                            wsSender.send({
-                                action: 'launch_success'
-                            }, true);
                         resolve(); // 进入下一个流程
                     }).catch(err => {
                         // 这里clearInterval必须分开写，err只是代表本次ping失败，还要继续ping下去
@@ -577,6 +572,10 @@ class Server extends ServerBase {
             });
         }
         console.log('Server Successfully Deployed!');
+        // 通知主控端，服务器成功启动
+        wsSender.send({
+            action: 'launch_success'
+        }, true);
         status.update(2300); // 设置状态码为2300，表示服务器成功部署
         // 开启RCON连接
         rcon.make(this.rconConfigs['port'], this.rconConfigs['password']);
