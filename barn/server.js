@@ -813,7 +813,12 @@ class Server extends ServerBase {
         let { reason, urgent } = options,
             that = this;
         status.update(2401); // 更新状态：服务器正准备关闭-打包中
-        logger.record(1, `Server closing: ${reason}`); // 报告给主控端
+        logger.record(1, `Server closed: ${reason}`); // 报告给主控端
+        // 通知主控端，Minecraft关闭的原因
+        wsSender.send({
+            action: 'server_closed',
+            reason: reason
+        }, true);
         // 如果没有开启备份，无法进入紧急模式
         if (!urgent || !this._backupEnabled) {
             // 普通情况下的关服
