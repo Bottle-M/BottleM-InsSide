@@ -43,9 +43,12 @@ class ServerBase {
         // 获得Minecraft服务器的日志文件路径
         this.mcServerLogPath = mc_server_log;
         // 取到之前的备份记录，如果没有就是null
-        this.previouBackupRecs = backup_records;
-        this.underMaintenance = underMaintenance;
-        this.restoreBeforeLaunch = restoreBeforeLaunch;
+        // 没有配置则为null(在程序没问题的情况下不会出现没有配置，这里是以防万一)
+        this.previouBackupRecs = backup_records || null;
+        // 如果没有配置就是false(在程序没问题的情况下不会出现没有配置，这里是以防万一)
+        this.underMaintenance = underMaintenance || false;
+        // 默认不恢复增量备份(在程序没问题的情况下不会出现没有配置，这里是以防万一)
+        this.restoreBeforeLaunch = restoreBeforeLaunch || false;
         this.rconConfigs = rconConfigs;
         // 脚本存放的目录
         this.dataDir = dataDir;
