@@ -65,7 +65,7 @@ function send(respObj, urgent = false) {
                 // 非紧急消息，等待了一段时间消息还没发出去，就抛弃
                 if (!urgent && waitedFor >= DISCARD_TIMEOUT) {
                     clearInterval(timer);
-                    console.error(`Error while sending data through WebSocket: ${err}`); // 消息发送失败
+                    console.error(`Error while sending data through WebSocket: time out`); // 消息发送失败
                 }
             }, POLL_INTERVAL);
     });
