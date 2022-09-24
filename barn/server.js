@@ -134,8 +134,6 @@ class IncBackup extends ServerBase {
                     // 备份标识名
                     backupDir = path.join(that.backupDestDir, backupKey),
                     mTimeFile = path.join(that.destDir, `${backupKey}.json`);// 记录修改日期的文件
-                // 检查备份目录是否存在，不存在则创建
-                utils.dirCheck(backupDir);
                 // 扫描目标目录，记录所有文件最初的mtime
                 let mTimeObj = utils.scanDirMTime(srcDirPath);
                 if (!mTimeObj) {
@@ -143,6 +141,8 @@ class IncBackup extends ServerBase {
                     logger.record(2, `Failed to scan directory ${srcDirPath}, skipped...`);
                     continue;
                 }
+                // (放在这里是因为，如果上面扫描失败，就不进行创建）检查备份目录是否存在，不存在则创建
+                utils.dirCheck(backupDir);
                 // 写入修改日期记录文件
                 writeFileSync(mTimeFile, JSON.stringify(mTimeObj), {
                     encoding: 'utf8'
