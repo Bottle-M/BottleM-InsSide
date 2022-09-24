@@ -1,6 +1,6 @@
 {
   "name": "bottlem-insside",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Instance Side Monitor of BottleM Server",
   "main": "index.js",
   "bin": "index.js",
