@@ -85,7 +85,9 @@ class IncBackup extends ServerBase {
             src_dirs
         } = this.configs['incremental_backup'];
         let backupDestDir = path.join(dest_dir, './backup'), // 备份用目录
-            restoreDestDir = path.join(dest_dir, './restore'); // 恢复用目录
+            restoreDestDir = path.join(dest_dir, './restore'), // 恢复用目录
+            initFlagFilePath = path.join(dest_dir, './.backup_init_flag'); // 初始化标志文件
+        this.initFlagFilePath = initFlagFilePath;
         // 记录增量备份文件的文件的路径
         this.backupRecordsFilePath = path.join(dest_dir, './backup-records.json');
         // 环境变量新增BACKUP_DEST_DIR和RESTORE_DEST_DIR
@@ -100,12 +102,19 @@ class IncBackup extends ServerBase {
         this.srcDirs = src_dirs;
         this.backupDestDir = backupDestDir;
         this.restoreDestDir = restoreDestDir;
-        // 标记仍未初始化
-        this.initialized = false;
         // 检查目录是否存在，不存在则创建
         utils.dirCheck(dest_dir);
         utils.dirCheck(backupDestDir);
         utils.dirCheck(restoreDestDir);
+        // 检查增量备份是否已经初始化(用于程序崩溃后的resume，一般不会用上)
+        try {
+            statSync(initFlagFilePath);
+            // 增量备份已经初始化
+            this.initialized = true;
+        } catch (e) {
+            // 标记仍未初始化
+            this.initialized = false;
+        }
     }
     /**
      * （异步）初始化（扫描所有srcDirs中的文件，记录最初的mtime）
@@ -120,24 +129,31 @@ class IncBackup extends ServerBase {
         return new Promise((resolve, reject) => {
             // 遍历待备份的目录
             for (let i = 0, len = that.srcDirs.length; i < len; i++) {
-                let dirPath = that.srcDirs[i],
-                    backupKey = utils.dirKey(dirPath), // 备份标识
+                let srcDirPath = that.srcDirs[i],
+                    backupKey = utils.dirKey(srcDirPath), // 备份标识
                     // 备份标识名
                     backupDir = path.join(that.backupDestDir, backupKey),
                     mTimeFile = path.join(that.destDir, `${backupKey}.json`);// 记录修改日期的文件
                 // 检查备份目录是否存在，不存在则创建
                 utils.dirCheck(backupDir);
-                // 扫描目标目录，记录所有文件的mtime
-                let mTimeObj = utils.scanDirMTime(dirPath);
+                // 扫描目标目录，记录所有文件最初的mtime
+                let mTimeObj = utils.scanDirMTime(srcDirPath);
                 if (!mTimeObj) {
-                    reject(`Failed to scan directory ${dirPath}`);
-                    return;
+                    // 如果目录不存在，会扫描失败，这个时候就要跳过这个目录
+                    logger.record(2, `Failed to scan directory ${srcDirPath}, skipped...`);
+                    continue;
                 }
                 // 写入修改日期记录文件
-                writeFileSync(mTimeFile, JSON.stringify(mTimeObj));
+                writeFileSync(mTimeFile, JSON.stringify(mTimeObj), {
+                    encoding: 'utf8'
+                });
             }
             // 初始化完成
             that.initialized = true;
+            // 创建初始化标志文件
+            writeFileSync(that.initFlagFilePath, '', {
+                encoding: 'utf8'
+            });
             console.log('Incremental backup initialized.');
             resolve();
         });
@@ -164,12 +180,13 @@ class IncBackup extends ServerBase {
                     copyMapPath = path.join(backupDir, 'copyMap.json'); // 记录复制文件和源文件的路径对应关系
                 console.log(`[Backup]Scanning directory: ${srcDirPath}`);
                 // 扫描目标目录，查看有哪些文件更新了
-                let prevObj = jsons.scRead(mTimeFile) || {}, // 读取上次备份时的mtime记录
+                let prevObj = jsons.scRead(mTimeFile) || {}, // 读取上次备份时的mtime记录，读取不到就默认所有文件都有更改
                     diffObj = utils.scanDirMTime(srcDirPath, prevObj); // 扫描目标目录，查看有哪些文件更新了
                 // 扫描失败
                 if (!diffObj) {
-                    reject(`Failed to scan directory ${srcDirPath}`);
-                    return;
+                    // 如果目录不存在，会扫描失败，这个时候就要跳过这个目录
+                    logger.record(2, `Failed to scan directory ${srcDirPath}, skipped...`);
+                    continue;
                 }
                 try {
                     let destDirCache = '', // 目标目录缓存，免得多次dirCheck
@@ -220,8 +237,6 @@ class IncBackup extends ServerBase {
             }, backupObj), true); // urgent=true，必须要发到主控端
             // 在本地记录备份信息
             that.recordBackup(backupObj);
-            // 初始化完成
-            that.initialized = true;
             resolve(backupName);
         }).then(backupName => {
             // 打包并上传本次增量备份
