@@ -41,6 +41,9 @@ module.exports = function (recvObj, ws) {
         case 'revive':
             utils.serverEvents.emit('revive'); // 激发复活事件
             break;
+        case 'urgent_stop':
+            utils.serverEvents.emit('urgentstop'); // 激发紧急停止服务器事件
+            break;
     }
     wsSender.send(respObj); // 发送响应
 }

@@ -741,6 +741,15 @@ class Server extends ServerBase {
                     urgent: false
                 });
             });
+            // 接受用户紧急关服请求
+            utils.serverEvents.once('urgentstop', () => {
+                // 实例即将被回收，紧急进入关服流程
+                resolve({
+                    reason: 'Received Urgent Stop signal from the backend!',
+                    stop: true,
+                    urgent: true // 紧急情况
+                });
+            });
             // 玩家人数监视器（轮询周期10秒）
             playerMonitor = setInterval(() => {
                 ping({
