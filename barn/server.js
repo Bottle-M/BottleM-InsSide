@@ -233,23 +233,27 @@ class IncBackup extends ServerBase {
                 };
             // 在本地记录备份信息
             that.recordBackup(backupObj);
-            // 回传给主控端（等到回传完毕再resolve）
-            wsSender.send(Object.assign({
-                action: 'backup_sync' // 回传的时候加上action
-            }, backupObj), true) // urgent=true，必须要发到主控端
-                .then(success => {
-                    resolve(backupName);
-                })
-        }).then(backupName => {
+            resolve({
+                backupName,
+                backupObj
+            });
+        }).then(resObj => {
+            const { backupName, backupObj } = resObj;
             // 打包并上传本次增量备份
             return utils.execScripts(that.backupScripts['backup'], Object.assign({
                 // 特别环境变量BACKUP_NAME，用于指定备份文件名
                 'BACKUP_NAME': backupName
-            }, that.execEnv), that.execDir);
-        }).then(stdouts => {
+            }, that.execEnv), that.execDir)
+                .then(stdouts => backupObj);
+        }).then(backupObj => {
+            // 增量备份已经成功上传，回传给主控端（等到回传完毕再resolve）
+            return wsSender.send(Object.assign({
+                action: 'backup_sync' // 回传的时候加上action
+            }, backupObj), true); // urgent=true，必须要发到主控端
+        }).then(success => {
             // 单次备份结束，清除增量备份目录
             return utils.clearDir(that.backupDestDir);
-        })
+        });
     }
     /**
      * （同步）将备份文件信息对象写入backupRecords
