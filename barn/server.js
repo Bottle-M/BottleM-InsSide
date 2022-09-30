@@ -231,13 +231,15 @@ class IncBackup extends ServerBase {
                     name: backupName,
                     time: Date.now()
                 };
-            // 回传给主控端
-            wsSender.send(Object.assign({
-                action: 'backup_sync' // 回传的时候加上action
-            }, backupObj), true); // urgent=true，必须要发到主控端
             // 在本地记录备份信息
             that.recordBackup(backupObj);
-            resolve(backupName);
+            // 回传给主控端（等到回传完毕再resolve）
+            wsSender.send(Object.assign({
+                action: 'backup_sync' // 回传的时候加上action
+            }, backupObj), true) // urgent=true，必须要发到主控端
+                .then(success => {
+                    resolve(backupName);
+                })
         }).then(backupName => {
             // 打包并上传本次增量备份
             return utils.execScripts(that.backupScripts['backup'], Object.assign({
